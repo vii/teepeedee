@@ -1,20 +1,28 @@
+* hook ftp up with streams
+* fix httpcontrol so it knows whether it should say https:// or http://
+* do xferlog format
+* put ftp back
+* make sure files in CVS are sync'd up
+
+* http content-range resume
+* generally make more http spec compliant
+* ftp auth tls
+
 * http name based virtual hosts
 * test harder
 * safely bind to privileged ports
 
+* do something about stream,table being passed around all the time
+	 unnecessarily
 * document options
 * smp optimization
-* generally make more http spec compliant
-* http content-range resume
 * maybe add realpath checking
 * do something about brute force password attacks
 * add rate limiting
-* add connect dos checking
-* do better authentication mechanisms
-* gracefully have maximum connection limits
 * catch out of memory conditions
 * reduce the number of stat syscalls
-* split up XferTable::do_poll into smaller functions
+* conftree cache?
 * IPv6
 * implement ftp STAT properly
 * implement ftp OPTS
+

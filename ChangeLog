@@ -1,3 +1,55 @@
+2003-03-08  John Fremlin  <john@fremlin.de>
+
+	* src/ftpcontrol.cc: help for specific commands
+
+2003-02-11  John Fremlin  <john@fremlin.de>
+
+	* src/ftpcontrol.cc (cmd_port): removed unnecessary assert_no_xfer
+	which screws up some ftp clients
+
+2003-01-28  John Fremlin  <john@fremlin.de>
+
+	* configure.in: added AC_SYS_LARGEFILE to automatically support
+	large files
+	stop using config.h as not all files include it
+
+	* lib/sendfile.cc (io): refactored into read_in and write_out
+
+	* lib/sendfile.hh (class Sendfile ): increased buffer size
+
+2003-01-19  John Fremlin  <john@fremlin.de>
+
+	* src/ftpmlstprinter.hh (class FTPMlstPrinter): add a / at the
+	beginning of filenames to confirm more properly to the spec
+
+2003-01-18  John Fremlin  <john@fremlin.de>
+
+	* src/ftpcontrol.cc (FTPControl): clear _port_addr before doing
+	getsockname in case of failure
+
+2003-01-17  John Fremlin  <john@fremlin.de>
+
+	* lib/iocontext.cc (getsockname): no longer refs desc in error
+	case to avoid infinite recursion
+	(bind_ipv4): clear sockaddr_in to 0 before we bind for NetBSD
+
+	* lib/iocontextresponder.cc (report_connect): add timestamp
+
+	* lib/iocontextresponder.hh (set_fd): added to call report_connect
+
+	* src/user.cc (authenticate): return already if password_plain
+	does not match given password
+
+	* lib/dircontainer.cc (readdir_r): implement a readdir_r for netbsd
+
+	* configure.in: check for presence of no sendfile function
+
+	* lib/sendfile.cc (system_sendfile): added version for systems
+	without any sendfile
+
+	* lib/conftree.hh (class ConfTree): renamed get(...,std::time_t)
+	to get_seconds to help it compile on NetBSD/alpha
+
 2002-12-31  John Fremlin  <john@fremlin.de>
 
 	* lib/iocontextresponder.cc (report_connect): added
