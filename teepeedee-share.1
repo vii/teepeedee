@@ -1,0 +1,47 @@
+.TH teepeedee-share "1"
+
+.SH NAME
+teepeedee-share \- share a directory with teepeedee(1)
+
+.SH SYNOPSIS
+.B teepeedee-share
+[OPTION]...
+
+.SH DESCRIPTION
+teepeedee-share uses the teepeedee file-server to share a directory over the
+network, using HTTP and FTP.  It is only meant to be used when you want to
+share the directory temporarily.  If you want a more permanent or more
+frequently run server, set up a configuration for teepeedee(1).
+
+By default the current working directory will be shared.  Port 20180 will be
+used for HTTP and 20121 for FTP.
+
+Use Ctrl-C to terminate teepeedee-share.
+
+teepeedee-share requires Python to be installed on your system.
+
+.SH WARNING
+teepeedee shares files as
+.B world writable
+if (and only if) they are user writable and group writable.
+
+.SH OPTIONS
+.TP
+-h, --help
+show the help message and exit
+
+.TP
+-cDIR, --configdir=DIR
+write configuration into DIR (default /tmp)
+
+.TP
+-dDIR, --sharedir=DIR
+share directory DIR (default current working directory)
+
+.TP
+-eFILE, --exec=FILE
+location of teepeedee executable
+
+.SH AUTHORS
+John Fremlin
+
