@@ -27,23 +27,21 @@ IOContext::desc()const
 void
 IOContext::close()
 {
-  if(_fd == -1)
-    return;
-
-  //  shutdown(_fd,2);
-  ::close(_fd);
-  _fd = -1;
+  if(_stream) {
+    delete _stream;
+    _stream = 0;
+  }
 }
 
 void
 IOContext::become_ipv4_socket()
 {
-  if(get_fd() != -1)
-    close();
+  close();
   
-  set_fd(socket (PF_INET, SOCK_STREAM, 0));
-  if(get_fd() == -1)
+  int fd = socket (PF_INET, SOCK_STREAM, 0);
+  if(fd == -1)
     throw UnixException("socket(PF_INET, SOCK_STREAM, 0)");
+  stream(new Stream(fd));
 }
 
 
@@ -56,6 +54,7 @@ IOContext::bind_ipv4(uint32_t in_addr,uint16_t port)
   set_nonblock();
   
   struct sockaddr_in name;
+  memset(&name,0,sizeof name); // for NetBSD 1.6
   name.sin_family = AF_INET;
   name.sin_port = port;
   name.sin_addr.s_addr = in_addr;
@@ -93,7 +92,7 @@ IOContext::bind_ipv4(uint32_t in_addr,uint16_t port_min,uint16_t port_max)
 void
 IOContext::discard_hangup(class XferTable&xt)
 {
-  shutdown(get_fd(),2);
+  stream()->shutdown();
   hangup(xt);
 }
 
@@ -101,7 +100,6 @@ void
 IOContext::hangup(class XferTable&xt)
 {
   xt.del(this);
-  delete this;
 }
 
 void
@@ -139,7 +137,7 @@ void
 IOContext::getsockname(void*addr,socklen_t*len)const
 {
   if(::getsockname(get_fd(),(sockaddr*)addr,len))
-    throw UnixException("getsockname on "+desc());
+    throw UnixException("getsockname"); //cannot ref desc as that uses getsockname
 }
 
 std::string
