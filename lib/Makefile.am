@@ -53,5 +53,6 @@ noinst_HEADERS = streamtable.hh \
 	time.hh \
 	sslstreamfactory.hh \
 	iocontextlistener.hh \
-	permitsignals.hh
+	permitsignals.hh \
+	signal.hh
 
