@@ -11,9 +11,9 @@ Stream::free()
 {
   if(consumer()){
     IOContext*tmp = consumer();
+    release_consumer();
     if(tmp->stream_hungup(*this))
       delete tmp;
-    release_consumer();
   }
 }
 

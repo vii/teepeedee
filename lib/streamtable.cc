@@ -7,11 +7,12 @@
 #include "stream.hh"
 #include "streamfd.hh"
 #include "iocontext.hh"
+#include "permitsignals.hh"
 
 #undef debug
-#define debug(x) warnx x
-#undef debug
 #define debug(x) do {}while(0)
+#undef debug
+#define debug(x) warnx x
 
 void
 StreamTable::remove(IOContext*ioc)
@@ -57,9 +58,27 @@ StreamTable::do_add(Stream*s)
 }
 
 void
+StreamTable::sow_and_reap()
+{
+  debug(("sowing and reaping"));
+  // do not change the order!! as added streams might also be deleted
+  for(_added_streams_type::iterator i=_added_streams.begin();
+      i!=_added_streams.end();++i)
+    do_add(*i);
+  _added_streams.clear();
+  
+  for(_deleted_streams_type::iterator i=_deleted_streams.begin();
+      i!=_deleted_streams.end();++i)
+    do_remove(*i);
+  _deleted_streams.clear();
+  debug(("finished sowing and reaping"));
+}
+
+
+void
 StreamTable::do_remove(Stream*s)
 {
-  debug(("removing stream %p: %s",s,s->desc().c_str()));
+  debug(("really removing stream %p",s));
   _streams.remove(s);
   StreamFD*sfd = dynamic_cast<StreamFD*>(s);
   if(sfd){
@@ -69,7 +88,15 @@ StreamTable::do_remove(Stream*s)
   } else {
     _nonfd_streams.remove(s);
   }
-  delete s;
+  debug(("delete starts"));
+  try{
+    delete s;
+  } catch (const std::exception&e){
+    warnx("exception raised deleting stream: %s",e.what());
+  } catch (...){
+    warnx("unknown exception raised deleting stream");
+  }
+  debug(("delete ends"));
 }
 
 bool
@@ -94,9 +121,11 @@ StreamTable::do_events(Stream*s)
       wantmore = false;
     }
   } catch (IOContext::Destroy&d){
+    debug(("removing due to destroy %p",d.target()));
     remove(d.target());
     wantmore = false;
   }catch(const Stream::ClosedException&e){
+    debug(("removing due to stream closed %p",s));
     remove(s);
     wantmore = false;
   } catch (const std::exception&e){
@@ -109,7 +138,7 @@ StreamTable::do_events(Stream*s)
 
 
 void
-StreamTable::poll()
+StreamTable::poll(int const*masked_signals)
 {
   struct pollfd *fds = 0;
   unsigned fds_size = 0;
@@ -120,7 +149,10 @@ StreamTable::poll()
       sow_and_reap();
       for(_streams_type::iterator i = _streams.begin();i!=_streams.end();++i)
 	do_events(*i);
-      sleep(1);
+      {
+	PermitSignals ps(masked_signals);
+	sleep(1);
+      }
     }
   }
   
@@ -133,6 +165,11 @@ StreamTable::poll()
 	  i!=_nonfd_streams.end();++i) {
 	if(do_events(*i))
 	  nonfd_events_pending = true;
+	if((*i)->consumer()){
+	  if((*i)->consumer()->check_timeout(**i)){
+	    debug(("has timed out %s:%s",(*i)->desc().c_str(),(*i)->consumer()?(*i)->consumer()->desc().c_str():"<nul>"));
+	  }
+	}
       }
       sow_and_reap();
       {
@@ -159,6 +196,11 @@ StreamTable::poll()
 	Stream*s = i->second;
 	fds[fd].events = POLLHUP;
 	try{
+	  if(s->consumer()){
+	    if(s->consumer()->check_timeout(*s)){
+	      debug(("has timed out %s:%s",s->desc().c_str(),s->consumer()?s->consumer()->desc().c_str():"<nul>"));
+	    }
+	  }
 	  if(s->consumer()) {
 	    if(s->consumer()->want_read(*s)) {
 	      debug(("wants read %s:%s",s->desc().c_str(),s->consumer()?s->consumer()->desc().c_str():"<nul>"));
@@ -171,21 +213,30 @@ StreamTable::poll()
 	      fds[fd].events |= POLLOUT;
 	    }
 	  }
+
 	} catch (IOContext::Destroy&d){
+	  debug(("removing fd due to destroy %p",d.target()));
 	  remove(d.target());
 	}
       }
       if(tables_modified())
 	continue;
       assert((unsigned)fd==fds_size);
-      
-      int events = ::poll(fds,fds_size,nonfd_events_pending?0:-1);
+
+      if(_async_notify)
+	break;
+      int events;
+      {
+	PermitSignals ps(masked_signals);
+	events = ::poll(fds,fds_size,nonfd_events_pending?0:-1);
+      }
 
       for(unsigned i=0;events && i < fds_size;++i)
 	if(fds[i].revents){
 	  Stream*s=_fd_to_stream[fds[i].fd];
 	  do_events(s);
 	  if(fds[i].revents&POLLHUP){
+	    debug(("scheduling %p for removal",s));
 	    remove(s);
 	  }
 	  --events;
@@ -196,6 +247,7 @@ StreamTable::poll()
       ::free(fds);
       fds = 0;
     }
+    throw;
   }
   if(fds) {
     ::free(fds);

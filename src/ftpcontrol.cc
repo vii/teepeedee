@@ -67,7 +67,7 @@ const FTPControl::ftp_cmd FTPControl::ftp_cmd_table[] = {
 #undef cmd
 
 
-FTPControl::FTPControl(const ConfTree&conf,StreamContainer&sc,SSLStreamFactory*ssf)
+FTPControl::FTPControl(const Conf&conf,StreamContainer&sc,SSLStreamFactory*ssf)
   :
   Control(conf,sc),
   _data_listener(0),
@@ -568,8 +568,13 @@ FTPControl::login(const std::string&password)
     return false;
   lose_auth();
 
+  bool success;
+  if(uname == "ftp" || uname == "anonymous")
+    success = user_login_default(_user,password);
+  else
+    success = user_login(_user,uname,password);
 
-  if(user_login(_user,uname,password)){
+  if(success){
     config().get_timeout("timeout_postlogin",*this);
     return true;
   }
@@ -659,6 +664,7 @@ FTPControl::passive_on(bool epsv)
     return false;
   }
   stream_container().add(s);
+  config().get_timeout("timeout_xfer",*_data_listener);
 
   sockaddr_in addr;
   s->getsockname(addr);

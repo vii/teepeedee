@@ -139,11 +139,11 @@ bool User::may_stat(const Path&path)
 bool
 User::authenticate(const std::string&username,
 		   const std::string&password,
-		   const ConfTree&usersdb)
+		   const Conf&usersdb)
 {
   if(!verify_password(username,password,usersdb))
     return false;
-  if(!_conf.book_increment("logins",1)){
+  if(!_conf.book_increment("logins")){
     throw LimitException();
   }
   _name = username;
@@ -167,7 +167,7 @@ User::deauthenticate()
 bool
 User::verify_password(const std::string&username,
 		   const std::string&password,
-		   const ConfTree&usersdb)
+		   const Conf&usersdb)
 {
   using std::isalnum; // damn gcc-2.95.2 vs glibc
   
@@ -191,7 +191,7 @@ User::verify_password(const std::string&username,
     return false;
 
   try{
-    usersdb.get(username,_conf);
+    _conf = Conf(usersdb,username);
 
     bool any_password_ok = false;
     _conf.get("any_password_ok",any_password_ok);

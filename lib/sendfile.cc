@@ -4,7 +4,6 @@
 
 #include "unixexception.hh"
 #include "sendfile.hh"
-#include "xferlimit.hh"
 #include "streamfd.hh"
 
 #if defined(HAVE_SENDFILE)&&defined(HAVE_DECL_SENDFILE)&& HAVE_DECL_SENDFILE
@@ -72,7 +71,7 @@ system_sendfile(int wfd, int rfd)
 #endif
 
 bool
-Sendfile::io(XferLimit*limit)
+Sendfile::io()
 {
   if(!_buf) {
 #ifdef SENDFILE_FUNCTION_PRESENT
@@ -85,7 +84,7 @@ Sendfile::io(XferLimit*limit)
 	  return true;
 	}
 	if(ret != -1){
-	  if(limit)limit->xfer(ret);
+	  limit_xfer(ret);
 	}
 	return false;
       } catch (const UnixException&ue){
@@ -102,7 +101,7 @@ Sendfile::io(XferLimit*limit)
   }
 
   bool ret = read_in();
-  if(limit)limit->xfer(_buf->len);
+  limit_xfer(_buf->len);
 
   if(data_buffered())
     write_out();

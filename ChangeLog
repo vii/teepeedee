@@ -1,3 +1,27 @@
+2004-01-29  John Fremlin  <john@fremlin.de>
+
+	* src/httpcontrol.cc (authenticate): set timeout however authentication occurs
+
+2004-01-28  John Fremlin  <john@fremlin.de>
+
+	* src/control.cc (increment): Now actually increment things
+
+	* lib/streamtable.cc (poll): check timeouts also on non-fd connections
+	(do_remove): catch exceptions thrown in delete
+
+2004-01-15  John Fremlin  <john@fremlin.de>
+
+	* lib/conftree.hh (class ConfTree): check that things were written correctly
+
+	* lib/iocontext.hh (class IOContext): removed hangup as it was wrong and never used
+
+	* lib/streamtable.cc (poll): added timeout check
+
+	* src/ftpcontrol.cc (passive_on): Set a timeout on the data listener
+
+	* lib/iocontextxfer.hh (class IOContextXfer): added limit_xfer,
+	which calls made_progress when sendfile xfers some bytes
+
 2003-06-21  John Fremlin  <john@fremlin.de>
 
 	* src/ftpcontrol.cc (passive_off): call _data_listener->detach to

@@ -4,7 +4,8 @@ noinst_LIBRARIES = libteepeedee.a
 
 
 libteepeedee_a_SOURCES = streamtable.cc \
-	conftree.cc \
+	conf.cc \
+	confdb.cc \
 	iocontextwriter.cc \
 	iocontextresponder.cc \
 	sendfile.cc \
@@ -22,7 +23,8 @@ libteepeedee_a_SOURCES = streamtable.cc \
 noinst_HEADERS = streamtable.hh \
 	iocontext.hh \
 	dircontainer.hh \
-	conftree.hh \
+	conf.hh \
+	confdb.hh \
 	iocontextwriter.hh \
 	path.hh \
 	unixexception.hh \
@@ -50,5 +52,6 @@ noinst_HEADERS = streamtable.hh \
 	streamcontainer.hh \
 	time.hh \
 	sslstreamfactory.hh \
-	iocontextlistener.hh
+	iocontextlistener.hh \
+	permitsignals.hh
 

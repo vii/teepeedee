@@ -1,0 +1,75 @@
+#! /usr/bin/python
+
+import tempfile
+import os
+import time
+import sys
+
+from optparse import OptionParser
+
+def write_file(filename, contents):
+    fp = file(filename,"w")
+    fp.write(contents)
+    fp.close()
+
+def write_config(dir,sharedir,proto_ports):
+    for proto in proto_ports.keys():
+        base = dir + "/" + proto + "/MyServer"
+        os.makedirs(base,0700)
+
+        print proto,"protocol server config in",base
+        write_file(base + "/bind_port",str(proto_ports[proto]))
+        print "--- listening on port",proto_ports[proto],"see",base+"/bind_port"
+
+        write_file(base + "/bind_addr","0.0.0.0\n")
+        print "--- listening on all interfaces, see",base + "/bind_addr"
+        write_file(base + "/greeting","Thank you for using teepeedee\n")
+
+        os.mkdir(base + "/users")
+        userbase = base + "/users/default-user"
+        os.mkdir(userbase)
+        write_file(userbase + "/any_password_ok","")
+        write_file(userbase + "/msg_welcome","Welcome to the teepeedee share created on " + time.asctime() +
+                   "\n")
+        
+        os.symlink(sharedir,userbase + "/homedir")
+
+proto_ports = { "http": 20180,
+                "ftp": 20121 
+                }
+
+p = OptionParser()
+p.add_option("-c","--configdir",dest="configdir",
+             help="write configuration into DIR (default temp. directory)",
+             metavar="DIR")
+p.add_option("-d","--sharedir",dest="sharedir",default=os.getcwd(),
+             help="share directory DIR (default current directory)",
+             metavar="DIR")
+p.add_option("-e","--exec",dest="executable",default="teepeedee",
+             help="location of teepeedee executable",
+             metavar="FILE")
+
+(options,args) = p.parse_args()
+
+dir = options.configdir
+
+if not dir:
+    dir = tempfile.mkdtemp("-tpd")
+    
+write_config(dir,options.sharedir,proto_ports)
+
+print
+print "WARNING"
+print "WARNING: Write access is enabled for group writable files and directories!"
+print "WARNING"
+print
+
+print "Now executing"
+print "   ",options.executable,dir
+
+try:
+    os.execlp(options.executable,options.executable,dir)
+except OSError, (no,strerror):
+    print "execlp("+options.executable+"):",strerror
+    sys.exit(1)
+

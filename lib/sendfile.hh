@@ -2,7 +2,6 @@
 #define _TEEPEEDEE_LIB_SENDFILE_HH
 
 #include "stream.hh"
-class XferLimit;
 
 class Sendfile 
 {
@@ -23,7 +22,7 @@ class Sendfile
   
   struct Buf
   {
-    char buffer[1<<16];
+    char buffer[1<<24];
     unsigned len;
     unsigned pos;
 
@@ -41,6 +40,12 @@ protected:
   has_buf()const
   {
     return _buf;
+  }
+
+  virtual
+  void
+  limit_xfer(off_t bytes)
+  {
   }
   
   
@@ -84,7 +89,7 @@ public:
   
   // returns true if finished (may throw XferLimitException)
   bool
-  io(XferLimit*limit=0);
+  io();
 
   ~Sendfile()
   {

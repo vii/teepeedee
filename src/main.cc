@@ -11,33 +11,68 @@
 #include <openssl/ssl.h>
 #endif
 
+#include <signal.hh>
 #include <streamtable.hh>
 #include <dircontainer.hh>
 #include <confexception.hh>
 #include <unixexception.hh>
+#include "confdb.hh"
+#include "conf.hh"
 #include "serverregistration.hh"
 
 ServerRegistration* ServerRegistration::registered_list;
 
 static
 void
-load_servers(StreamTable&xt,const std::string&path,Server::Factory factory)
+load_servers(StreamTable&xt,Conf&conf,Server::Factory factory)
 {
-  
-  DirContainer configs(path);
-
-  for(DirContainer::iterator i = configs.begin(); i != configs.end(); ++i){
-    Server *fl = factory();
-    std::string cfg = configs.name() + "/" + *i;
+  typedef std::list<ConfDB::Key> config_keys_t;
+  config_keys_t config_keys;
+  conf.get_subkeys(config_keys);
+  for(config_keys_t::iterator i = config_keys.begin();i!=config_keys.end();++i) {
+    Conf sc(conf,*i);
+    Server *fl = factory(sc);
     fl->stream_container(&xt);
     try {
-      xt.add(fl->read_config(cfg));
+      xt.add(fl->read_config());
     }
     catch(std::exception&e){
       warnx("%s",e.what());
-      warnx("server config \"%s\" bad",cfg.c_str());
+      warnx("server config \"%s\" bad",sc.get_name().c_str());
       delete fl;
     }
+  }
+}
+
+static
+StreamTable*running_table;
+
+static
+void
+stop_table(int signal)
+{
+  // strsignal is a GNU extension
+  warnx("received signal %d, shutting down",signal);
+  
+  if(running_table)
+    running_table->async_notify_stop();
+}
+
+static
+ConfDB*running_db;
+static
+void
+sync_conf_db(int signum)
+{
+  warnx("received signal %d, sync'ing configuration",signum);
+  try{
+    if(running_db)
+      running_db->sync();
+  } catch(const std::exception&e){
+    warnx("error sync'ing: %s",e.what());
+  }catch (...){
+    warnx("caught unknown exception sync'ing configuration");
+    abort();
   }
 }
 
@@ -45,19 +80,45 @@ static
 void
 start_servers(const std::string&configdir)
 {
-  StreamTable xt;
+  ConfDB db(configdir);
+  
+  {
+    running_db = &db;
+    StreamTable xt;
 
-  for(ServerRegistration* i=ServerRegistration::registered_list;
-      i;i=i->next()){
-    load_servers(xt,configdir+ "/" + (*i).name(),(*i).factory());
+    for(ServerRegistration* i=ServerRegistration::registered_list;
+	i;i=i->next()){
+      Conf sc(db,i->name());
+      load_servers(xt,sc,(*i).factory());
+    }
+  
+    if(xt.empty())
+      errx(1,"no valid servers specified in \"%s\"",configdir.c_str());
+
+    running_table = &xt;
+    {
+      const int signals[] = { SIGINT, SIGTERM, SIGUSR1, NSIG 
+      };
+      sigset_t ss;
+      sigemptyset(&ss);
+      for(int const*i=signals;*i!=NSIG;++i)
+	sigaddset(&ss,*i);
+      sigprocmask(SIG_BLOCK,&ss,0);
+
+      Signal sigint(SIGINT,stop_table);
+      Signal sigterm(SIGTERM,stop_table);
+      Signal sigusr1(SIGUSR1,sync_conf_db);
+      
+      xt.poll(signals);
+      
+      running_db = 0;
+    }
+    running_table = 0;
   }
   
-  if(xt.empty())
-    errx(1,"no valid servers specified in \"%s\"",configdir.c_str());
-  
-  xt.poll();
-  errx(1,"all servers died");
+  db.sync();
 }
+
 
 static
 void
@@ -110,5 +171,5 @@ int main(int argc,char*argv[])
     errx(1,"uncaught unknown exception");
   }
 
-  return 1;
+  return 0;
 }

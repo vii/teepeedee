@@ -4,7 +4,7 @@
 #include <string>
 #include <map>
 
-#include <conftree.hh>
+#include <conf.hh>
 #include <uri.hh>
 #include <iocontextcontrolled.hh>
 
@@ -225,7 +225,7 @@ protected:
     ;
   
 public:
-  HTTPControl(const ConfTree&c,StreamContainer&,const std::string& proto="http")
+  HTTPControl(const Conf&c,StreamContainer&,const std::string& proto="http")
     ;
   
   void

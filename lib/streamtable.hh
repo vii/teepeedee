@@ -6,6 +6,7 @@
 #include <map>
 #include <set>
 
+#include <signal.h>
 
 #include "streamcontainer.hh"
 class Stream;
@@ -26,25 +27,16 @@ class StreamTable:public StreamContainer
   _deleted_streams_type _deleted_streams;
   typedef _deleted_streams_type _added_streams_type;
   _deleted_streams_type _added_streams;
-  
+
+  sig_atomic_t _async_notify;
   void
   free()
     ;
   
   void
   sow_and_reap()
-  {
-    // do not change the order!! as added streams might also be deleted
-    for(_added_streams_type::iterator i=_added_streams.begin();
-	i!=_added_streams.end();++i)
-      do_add(*i);
-    _added_streams.clear();
-    
-    for(_deleted_streams_type::iterator i=_deleted_streams.begin();
-	i!=_deleted_streams.end();++i)
-      do_remove(*i);
-    _deleted_streams.clear();
-  }
+    ;
+
   void
   remove(Stream*s)
   {
@@ -78,8 +70,16 @@ class StreamTable:public StreamContainer
   {
   }
 public:
-  StreamTable()
+  
+  
+  StreamTable():_async_notify(0)
   {
+  }
+
+  void
+  async_notify_stop()
+  {
+    _async_notify = 1;
   }
   
   void
@@ -89,7 +89,7 @@ public:
   }
 
   void
-  poll();
+  poll(int const*masked_signals);
 
   ~StreamTable()
   {

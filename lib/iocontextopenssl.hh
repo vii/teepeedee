@@ -19,13 +19,13 @@ class IOContextOpenSSL : public IOContextWriter
   
   unsigned ssl_buffer_max()const
   {
-    return 1<<16;
+    return 1<<24;
   }
   bool ssl_buffer_too_big(BIO*bio)
   {
     BUF_MEM *bptr;
     BIO_get_mem_ptr(bio, &bptr);
-    return(bptr->length > (int)ssl_buffer_max());
+    return(bptr->length >= (int)ssl_buffer_max());
   }
   bool ssl_write_buffer_too_big()
   {
@@ -124,14 +124,14 @@ protected:
 
     try_state_change();
 
-    char buf[16000]; // must be separate buffer because ssl might require protocol reads to continue writes
+    char buf[1<<16]; // must be separate buffer because ssl might require protocol reads to continue writes
     
     max = (max && max < sizeof buf) ? max : sizeof buf;
     ssize_t ret = do_read(stream,buf,max);
     if(ret == -1)
       return;
     if(ret == 0) {
-      hangup(stream);
+      delete_this();
       return;
     }
     if(ret != BIO_write(_ssl_in, buf, ret))
@@ -213,6 +213,7 @@ public:
       throw OpenSSLException("BIO_new (output BIO)");
     }
     SSL_set_bio(_ssl,_ssl_in,_ssl_out);
+    SSL_set_read_ahead(_ssl,1);
   }
 
   std::string

@@ -9,4 +9,8 @@
 	FTP enhancements: EPRT,EPSV support,
 	AUTH TLS support.
 	Also documented configuration.
-		
+* 20040115: version 0.2.1:
+	Fixed timeout handling
+* 20040129: version 0.3.0:
+	Rewritten configuration mechanism
+	New teepeedee-share script to automatically create a configuration

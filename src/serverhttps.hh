@@ -8,11 +8,15 @@ class ServerHTTPS : public ServerSSL
 {
   typedef ServerSSL super;
 public:
+  ServerHTTPS(Conf&c):super(c)
+  {
+  }
+  
   static
   Server*
-  factory()
+  factory(Conf&c)
   {
-    return new ServerHTTPS;
+    return new ServerHTTPS(c);
   }
   IOContext*
   new_iocontext()

@@ -1,5 +1,5 @@
-sbin_PROGRAMS = teepeedee
-
+bin_PROGRAMS = teepeedee
+bin_SCRIPTS = teepeedee-share
 
 
 

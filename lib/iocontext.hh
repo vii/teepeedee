@@ -38,24 +38,6 @@ class IOContext
   {
     return _timeout_time;
   }
-  bool
-  check_timeout(Stream&stream)
-  {
-    if(!has_timeout())return false;
-    std::time_t limit = get_timeout();
-    std::time_t now = std::time(0);
-    
-    if(!limit){
-      reset_timeout(now);
-      return false;
-    }
-    if(now > limit){
-      reset_timeout(now);
-      timedout(stream);
-      return true;
-    }
-    return false;
-  }
 protected:  
   void
   made_progress()
@@ -69,6 +51,8 @@ protected:
     ssize_t ret = stream.read(buffer,size);
     if(ret != -1)
       made_progress();
+    else
+      check_timeout(stream);
     return ret;
   }
 
@@ -78,6 +62,8 @@ protected:
     ssize_t ret = stream.write(buffer,size);
     if(ret != -1)
       made_progress();
+    else
+      check_timeout(stream);
     return ret;
   }
 
@@ -87,6 +73,9 @@ protected:
     Stream* s = stream.accept();
     if(s)
       made_progress();
+    else
+      check_timeout(stream);
+      
     return s;
   }
 
@@ -106,18 +95,8 @@ protected:
   void
   timedout(Stream&stream)
   {
-    hangup(stream);
+    delete_this();
   }
-
-  void hangup(Stream&stream)
-  {
-    if(stream_hungup(stream))
-      delete_this();
-    else
-      if(stream.consumer()==this)
-	stream.release_consumer();
-  }
-
 
 public:
   class Destroy
@@ -143,6 +122,24 @@ public:
   IOContext():_max_idle(0),_timeout_time(0)
   {
   }
+  bool
+  check_timeout(Stream&stream)
+  {
+    if(!has_timeout())return false;
+    std::time_t limit = get_timeout();
+    std::time_t now = std::time(0);
+    
+    if(!limit){
+      reset_timeout(now);
+      return false;
+    }
+    if(now > limit){
+      reset_timeout(now);
+      timedout(stream);
+      return true;
+    }
+    return false;
+  }
   
   void
   read(Stream&stream,size_t max=0)
@@ -154,7 +151,6 @@ public:
   write(Stream&stream,size_t max=0)
   {
     write_out(stream,max);
-    check_timeout(stream);
   }
   
   // can't make these const as e.g. iocontextwriter needs to do a bunch of stuff

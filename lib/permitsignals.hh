@@ -5,7 +5,7 @@
 
 class PermitSignals 
 {
-  sigset_t my_old;
+  sigset_t _old;
 public:
   PermitSignals(int const*masked_signals)
   {
@@ -13,11 +13,11 @@ public:
     sigemptyset(&ss);
     for(const int*s=masked_signals;*s!=NSIG;s++)
       sigaddset(&ss,*s);
-    sigprocmask(SIG_UNBLOCK,&ss,&my_old);
+    sigprocmask(SIG_UNBLOCK,&ss,&_old);
   }
   ~PermitSignals()
   {
-    sigprocmask(SIG_SETMASK,&my_old,0);
+    sigprocmask(SIG_SETMASK,&_old,0);
   }
 }
 ;

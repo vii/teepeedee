@@ -22,7 +22,12 @@ protected:
 	throw;
       }
       try{
-	t->consumer(new_iocontext());
+	IOContext*ioc = new_iocontext();
+	if(!ioc){
+	  delete t;
+	  return;
+	}
+	t->consumer(ioc);
 	stream_container().add(t);
       } catch (...) {
 	delete t;

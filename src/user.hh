@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 #include <xferlimit.hh>
-#include <conftree.hh>
+#include <conf.hh>
 #include <xferlimitexception.hh>
 class Path;
 class FileLister;
@@ -22,7 +22,7 @@ class User
 {
   typedef float ratio_t;
   
-  ConfTree _conf;
+  Conf _conf;
   std::string _name;
 
   // optimizations
@@ -175,7 +175,7 @@ public:
 
   bool authenticate(const std::string&username,
 		    const std::string&password,
-		    const ConfTree&usersdb)
+		    const Conf&usersdb)
     ;
   void deauthenticate()
     ;
@@ -351,7 +351,7 @@ private:
     ;
   bool verify_password(const std::string&username,
 		    const std::string&password,
-		    const ConfTree&usersdb)
+		    const Conf&usersdb)
     ;
 };
 

@@ -20,7 +20,7 @@
 
 
 
-HTTPControl::HTTPControl(const ConfTree&c,StreamContainer&s,const std::string&proto):
+HTTPControl::HTTPControl(const Conf&c,StreamContainer&s,const std::string&proto):
   Control(c,s),
   _protocol(proto),
   _xfer(0)
@@ -134,15 +134,14 @@ HTTPControl::try_authenticate(User&user)
 void
 HTTPControl::authenticate(User&user)
 {
-  try{
-    if(try_authenticate(user))
-      return;
-  } catch (const User::AccessException&){
+  if(try_authenticate(user)) {
+    config().get_timeout("timeout_postlogin",*this);
+    return;
   }
-
-  if(!user.authenticate("default-user","",config()))
+  
+  if(!user_login_default(user))
     throw User::AccessException();
-
+  
   config().get_timeout("timeout_postlogin",*this);
 }
 
@@ -321,11 +320,11 @@ HTTPControl::response_header_end()
     if(_req_ver_major == 1&&_req_ver_minor ==0)
       response_header_line("Connection","Keep-Alive");
   }
+  std::string realm = "teepeedee";
   if(config().exists("realm")){
-    std::string realm;
     config().get_line("realm",realm);
-    response_header_line("WWW-Authenticate","Basic realm=\"" + realm + "\"");
   }
+  response_header_line("WWW-Authenticate","Basic realm=\"" + realm + "\"");
   
   add_response("\r\n");
 }

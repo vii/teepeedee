@@ -38,11 +38,21 @@ class IOContextXfer : public IOContextControlled,public Sendfile
     }
     if(!stream_in()||!stream_out())
       return;
-    bool result = Sendfile::io(_limit);
+    bool result = Sendfile::io();
+
     if(result){
       completed();
       return;
     }
+  }
+ protected:
+
+  void
+  limit_xfer(off_t bytes)
+  {
+    _limit->xfer(bytes);
+    if(bytes)
+      made_progress();
   }
   
 public:

@@ -1,14 +1,14 @@
 #ifndef _TEEPEEDEE_SRC_SERVER_HH
 #define _TEEPEEDEE_SRC_SERVER_HH
 
-#include <conftree.hh>
+#include <conf.hh>
 #include <iocontextlistener.hh>
 
 class Server:public IOContextListener
 {
   typedef IOContextListener super;
   
-  ConfTree _conf;
+  Conf _conf;
 //   bool
 //   full()
 //   {
@@ -26,21 +26,23 @@ class Server:public IOContextListener
 //   }
   
 protected:
-  ConfTree&
+  Conf&
   config()
   {
     return _conf;
   }    
   
 public:
+  Server(Conf&conf):_conf(conf)
+  {
+  }
+  
+  typedef Server* (*Factory)(Conf&conf);
 
-  // throws exception on failure
   virtual
   Stream*
-  read_config(const std::string&confname)
+  read_config()
     ;
-
-  typedef Server* (*Factory)();
 };
 
 

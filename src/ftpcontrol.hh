@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#include <conftree.hh>
+#include <conf.hh>
 #include <path.hh>
 #include "control.hh"
 #include "user.hh"
@@ -425,7 +425,7 @@ protected:
   read_in(Stream&stream,size_t max)
     ;
 public:
-  FTPControl(const ConfTree&conf,StreamContainer&sc,SSLStreamFactory*ssf=0)
+  FTPControl(const Conf&conf,StreamContainer&sc,SSLStreamFactory*ssf=0)
     ;
 
   void

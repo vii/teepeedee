@@ -1,3 +1,12 @@
+QuickStart:
+====
+
+Once installed (./configure && make && make install) use the Python
+script
+	teepeedee-share
+to share the current directory automatically with FTP and HTTP
+
+
 Description
 ====
 
@@ -7,17 +16,16 @@ ftp simultaneously, listening on any number of ports and providing
 entirely different views of the filesystem to different users. It uses
 sendfile and is written in C++.
 
-teepeedee certainly runs on FreeBSD i586 4.7-STABLE, Linux i686 2.4.20
-with glibc 2.3, Debian i686 Woody (20021220), Debian PPC Unstable
-(20021220).
+teepeedee certainly used to run on FreeBSD i586 4.7-STABLE, Linux i686
+2.4.20 with glibc 2.3, Debian i686 Woody (20021220), Debian PPC
+Unstable (20021220).
 
-You make like to increase the rlimit'd number of open file descriptors
+You may like to increase the rlimit'd number of open file descriptors
 to allow teepeedee to have more connnections (in the Bourne shell,
 ulimit -n).
 
-It is a very untested at the moment and does not have any DoS
-protection at all. Please report problems to the author, John Fremlin
-<john@fremlin.de>!
+It is a very untested at the moment. Please report problems to the
+author, John Fremlin <john@fremlin.de>!
 
 Teepeedee can be found at http://john.fremlin.de/programs/teepeedee
 
@@ -47,6 +55,15 @@ and are user and group writable. A file or directory's parents ARE NOT
 CHECKED FOR ACCESS PERMISSIONS.
 
 
+Signals
+==
+
+SIGTERM, SIGINT - cleanly shut teepeedee down
+
+SIGUSR1 - write out pending configuration information, and clear
+configuration cache
+
+
 Configuration
 ==
 
@@ -59,13 +76,8 @@ Under the configuration root, there should be a number of lowercase
 directories named after protocols, e.g. "ftp" or "http". Inside them should
 be directories defining servers.
 
-For an example, untar "example-config.tar" in the distribution and
-look at how it uses symlinks to share user information between the
-HTTP and FTP servers.  If you want to start from that configuration,
-note the bind_addr files contain "127.0.0.1" (=localhost) so that the
-servers will only be accessible from same computer they're running on;
-to change that either delete the bind_addr files or change the IP
-address in them.
+For an example use the teepeedee-share program to create a base
+configuration.
 
 
 Root configuration structure
@@ -96,7 +108,7 @@ files are written to, these are marked (written).
 bind_port - (required) contains port number to listen on as an ASCII
 	decimal (e.g. 8080)
 
-bind_addr - IP address to listen on
+bind_addr - IP address to listen on, in dotted quad format (e.g. 127.0.0.1)
 
 timeout_prelogin - number of seconds of inactivity before closing the
 connection before the user is authenticated (logging in anonymously
@@ -107,6 +119,12 @@ connection after the user is authenticated
 
 timeout_xfer - number of seconds of inactivity before closing a file
 transfer or directory listing
+
+unauthenticated_connections - (written) the number of unauthenticated
+connections active
+
+unauthenticated_connections_max - maximum number of connections in a
+pre-authentication state
 
 users/ - Users directory (described below)
 
@@ -161,8 +179,8 @@ to enter passive mode (where the client connects to another port on
 the server for the data transfer)
 
 no_port_mode - if this file exists the server will refuse to enter
-(where the server connects to a port on the client for the data
-transfer)
+active mode (where the server connects to a port on the client for the
+data transfer)
 
 
 Users directory
@@ -205,3 +223,5 @@ download (may be extended with if upload_ratio is set). 0 means unlimited
 upload_bytes - (written) number of bytes uploaded
 
 upload_bytes_max - approximate number of bytes a user may upload
+
+msg_welcome - this message will be displayed to the user after login

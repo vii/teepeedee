@@ -13,7 +13,7 @@ class ServerFTP : public ServerSSL
   typedef ServerSSL super;
   bool _ssl_available;
 public:
-  ServerFTP():_ssl_available(false)
+  ServerFTP(Conf&c):ServerSSL(c),_ssl_available(false)
   {
   }
   
@@ -23,9 +23,9 @@ public:
 
   static
   Server*
-  factory()
+  factory(Conf&conf)
   {
-    return new ServerFTP;
+    return new ServerFTP(conf);
   }
 
   std::string desc()const
@@ -40,16 +40,16 @@ public:
   }
   
   Stream*
-  read_config(const std::string&confname)
+  read_config()
   {
     _ssl_available = false;
-    Stream*ret=Server::read_config(confname);
+    Stream*ret=Server::read_config();
     try{
       read_config_ssl();
       _ssl_available = true;
     } catch (const SSLStreamFactory::UnsupportedException&ue){
     } catch (const std::exception&e){
-      warnx("SSL not available for server at %s because %s",confname.c_str(),e.what());
+      warnx("SSL not available for server at %s because %s",config().get_name().c_str(),e.what());
     } catch (...){
     }
     return ret;

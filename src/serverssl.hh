@@ -9,13 +9,13 @@ class ServerSSL:public Server,public SSLStreamFactory
   typedef Server super;
 public:
   
-  ServerSSL()
+  ServerSSL(Conf&conf):super(conf)
   {
   }
   Stream*
-  read_config(const std::string&confname)
+  read_config()
   {
-    Stream*ret=super::read_config(confname);
+    Stream*ret=super::read_config();
     try{
       read_config_ssl();
     } catch (...){

@@ -6,15 +6,19 @@
 class ServerHTTP : public Server
 {
 public:
+  ServerHTTP(Conf&c):Server(c)
+  {
+  }
+  
   IOContext*
   new_iocontext()
     ;
 
   static
   Server*
-  factory()
+  factory(Conf&c)
   {
-    return new ServerHTTP;
+    return new ServerHTTP(c);
   }
 
   std::string desc()const

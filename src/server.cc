@@ -4,12 +4,10 @@
 #include "server.hh"
 
 Stream*
-Server::read_config(const std::string&confname)
+Server::read_config()
 {
   uint32_t inaddr = INADDR_ANY;
   int port;
-
-  _conf.set_name(confname);
 
   if(_conf.exists("bind_addr"))
     _conf.get_ipv4_addr("bind_addr",inaddr);
