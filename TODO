@@ -1,6 +1,10 @@
-* make definitely sure files in CVS and Makefile.am are sync'd up
 * document options
+* performance test
 
+* poll on linux takes at least one jiffy, so max rate with 64 KB buffers is 64 KB * HZ
+	- to solve this bottleneck could use mmap (but the address space is limited)
+	- could use varying buffer sizes
+* ssl does not need a separate buffer
 * http content-range resume
 * generally make more http spec compliant
 
