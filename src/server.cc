@@ -1,8 +1,9 @@
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <stream.hh>
 #include "server.hh"
 
-void
+Stream*
 Server::read_config(const std::string&confname)
 {
   uint32_t inaddr = INADDR_ANY;
@@ -14,10 +15,13 @@ Server::read_config(const std::string&confname)
     _conf.get_ipv4_addr("bind_addr",inaddr);
   _conf.get("bind_port",port);
 
-  if(get_fd() == -1)
-    become_ipv4_socket();
-  set_reuse_addr();
-  bind_ipv4(inaddr,htons(port));
-  listen();
-}
+  sockaddr_in name;
+  memset(&name,0,sizeof name); // for NetBSD 1.6
+  name.sin_family = AF_INET;
+  name.sin_addr.s_addr = inaddr;
+  name.sin_port = htons(port);
 
+  Stream* s = Stream::listen((const sockaddr*)&name,sizeof name);
+  s->consumer(this);
+  return s;
+}

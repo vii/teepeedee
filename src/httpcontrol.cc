@@ -11,31 +11,22 @@
 #include <iocontextxfer.hh>
 #include <filelister.hh>
 #include <confexception.hh>
-#include <xfertable.hh>
 #include <path.hh>
 
+#include "xferlimituser.hh"
 #include "httpcontrol.hh"
 #include "httplist.hh"
 
 
 
-HTTPControl::HTTPControl(int fd, const ConfTree&c):
-  IOContextResponder(fd),
-  _conf(c),
-  _xfer(0)
+HTTPControl::HTTPControl(const ConfTree&c,const std::string&proto):
+  Control(c),
+  _protocol(proto),
+  _xfer(0),
+  _xfer_stream(0)
 {
   reset_req();
 }
-
-void
-HTTPControl::hangup(XferTable&xt)
-{
-  if(_xfer)
-    _xfer->hangup(xt);
-
-  IOContextResponder::hangup(xt);
-}
-
 
 bool
 HTTPControl::persistant()
@@ -130,9 +121,8 @@ HTTPControl::try_authenticate(User&user)
   std::string unamepasswd = base64_decode(base64);
   for(unsigned i = 0;unamepasswd.c_str()[i];++i)
     if(unamepasswd[i]==':'){
-      ConfTree users;
-      _conf.get("users",users);
-      if(!user.authenticate(unamepasswd.substr(0,i),unamepasswd.substr(i+1),users))
+      std::string username = unamepasswd.substr(0,i);
+      if(!user_login(user,username,unamepasswd.substr(i+1)))
 	throw User::AccessException();
       return true;
     }
@@ -143,20 +133,25 @@ HTTPControl::try_authenticate(User&user)
 void
 HTTPControl::authenticate(User&user)
 {
-  if(try_authenticate(user))
-    return;
-  
-  if(!user.authenticate("default-user","",_conf))
+  try{
+    if(try_authenticate(user))
+      return;
+  } catch (const User::AccessException&){
+  }
+
+  if(!user.authenticate("default-user","",config()))
     throw User::AccessException();
 }
 
 void
-HTTPControl::parse_req_line(XferTable&xt,char*buf,size_t len)
+HTTPControl::parse_req_line(char*buf,size_t len)
 {
+  using std::tolower; // for NetBSD 1.6
+  
   char*end = buf+len;
   char*start;
   for(start=buf;start<end;++start){
-    *start = std::tolower(*start);
+    *start = tolower(*start);
     if(*start == ' '){
       *start++ = 0;
       _req_method = buf;
@@ -167,6 +162,7 @@ HTTPControl::parse_req_line(XferTable&xt,char*buf,size_t len)
   
   for(char*i=start;i<end;++i)
     if(*i == ' '){
+      _req_uri_is_dir = (i<=start) ? 0 : ( *(i-1) == '/');
       *i++ = 0;
       _req_uri.parse(start);
       start = i;
@@ -199,15 +195,16 @@ HTTPControl::parse_req_line(XferTable&xt,char*buf,size_t len)
 }
   
 void
-HTTPControl::parse_header(XferTable&xt,char*buf,size_t len)
+HTTPControl::parse_header(char*buf,size_t len)
 {
   using std::isspace; // damn gcc-2.95.2 vs glibc
+  using std::tolower; // for NetBSD 1.6
 
   char*end = buf+len;
   char*start;
   std::string name;
   for(start=buf;start<end;++start) {
-    *start = std::tolower(*start);
+    *start = tolower(*start);
     if(*start == ':'){
       *start++ = 0;
       name = buf;
@@ -226,12 +223,12 @@ HTTPControl::parse_header(XferTable&xt,char*buf,size_t len)
 }
 
 void
-HTTPControl::finished_req(XferTable&xt)
+HTTPControl::finished_req()
 {
 #define method(name) { #name, & HTTPControl::cmd_ ## name }
   struct cmd
   {
-    typedef void (HTTPControl::*function_type)(XferTable&xt);
+    typedef void (HTTPControl::*function_type)();
     const char*name;
     function_type function;
   };
@@ -250,14 +247,17 @@ HTTPControl::finished_req(XferTable&xt)
   try{
     for(const cmd*i=cmd_table;i->name;++i)
       if(_req_method == i->name) {
-	(this->*i->function)(xt);
+	(this->*i->function)();
 	finished_queuing_response();
 	return;
       }
-  } catch (User::AccessException&){
+  } catch (const User::AccessException&){
     error_response("401","I'm sorry, I can't let you do that");
     return;
-  } catch (ConfException&ce){
+  } catch (const LimitException&){
+    error_response("503","Server overloaded");
+    return;
+  } catch (const ConfException&ce){
     error_response("500","Server misconfigured: " + std::string(ce.what()));
     return;
   }
@@ -272,8 +272,8 @@ HTTPControl::error_response(const std::string& code,const std::string& str)
   response_header_line("Content-Type","text/html");
 
   std::string err;
-  if(_conf.exists("error-"+code))
-    _conf.get("error-"+code,err);
+  if(config().exists("error-"+code))
+    config().get("error-"+code,err);
   else
     err = std::string("<head><title>")+str+"</title></head>\n"
 	       "<body><h1>"+str+"</h1>\n"
@@ -296,17 +296,17 @@ HTTPControl::response_header_line(const std::string& name, unsigned long value)
 }
 
 void
-HTTPControl::finished_reading(XferTable&xt,char*buf,size_t len)
+HTTPControl::finished_reading(char*buf,size_t len)
 {
   if(!has_req_line()) {
-    parse_req_line(xt,buf,len);
+    parse_req_line(buf,len);
     return;
   }
   if(len == 0) {
-    finished_req(xt);
+    finished_req();
     return;
   }
-  parse_header(xt,buf,len);
+  parse_header(buf,len);
 }
 
 void
@@ -318,9 +318,9 @@ HTTPControl::response_header_end()
     if(_req_ver_major == 1&&_req_ver_minor ==0)
       response_header_line("Connection","Keep-Alive");
   }
-  if(_conf.exists("realm")){
+  if(config().exists("realm")){
     std::string realm;
-    _conf.get_line("realm",realm);
+    config().get_line("realm",realm);
     response_header_line("WWW-Authenticate","Basic realm=\"" + realm + "\"");
   }
   
@@ -334,46 +334,15 @@ HTTPControl::xfer_done(IOContextControlled*xfer,bool successful)
     warnx("internal error in HTTPControl::xfer_done");
     return;
   }
-
-  set_fd(_xfer->get_fd());
-  _xfer->set_fd(-1);
-  _xfer = 0;
 }
 
-
-HTTPControl::events_t
-HTTPControl::get_events()
-{
-  if(_xfer)
-    return POLLIN|POLLOUT;
-  return IOContextResponder::get_events();
-}
 
 void
-HTTPControl::start_xfer(XferTable&xt,IOContextControlled*xfer)
+HTTPControl::start_xfer(IOContextControlled*xfer,Stream*st)
 {
   _xfer = xfer;
+  _xfer_stream = st;
 }
-
-bool
-HTTPControl::io(const struct pollfd&pfd,XferTable&xt)
-{
-  if(_xfer && !response_ready()){
-    _xfer->set_fd(get_fd());
-    set_fd(-1);
-    xt.add(_xfer);
-    if(closing()) {
-      _xfer->detach();
-      _xfer = 0;
-      hangup(xt);
-    } else {
-      set_timeout_interval(0);
-    }
-    return true;
-  }
-  return IOContextResponder::io(pfd,xt);
-}
-
 
 Path
 HTTPControl::get_uri_path()const
@@ -381,69 +350,174 @@ HTTPControl::get_uri_path()const
   return Path(_req_uri.path());
 }
 
+std::string
+HTTPControl::mimetype(const Path&path)
+{
+  if(path.empty())
+    return std::string();
+  std::string last=*path.rbegin();
+  std::string::size_type pos = last.rfind('.');
+  if(pos == std::string::npos)
+    return std::string();
+  std::string ext = last.substr(pos+1);
+  if(ext == "html")
+    return "text/html";
+  return std::string();
+}
+
 void
-HTTPControl::do_cmd_get(XferTable&xt,bool actually_send_data)
+HTTPControl::start_file_xfer(Stream*fd,
+			     const std::string&filename,
+			     User&user,
+			     XferLimit::Direction::type dir)
+{
+  IOContextXfer*ioc;
+  try{
+    ioc = new IOContextXfer(this);
+  } catch (...){
+    delete fd;
+    throw;
+  }
+  fd->consumer(ioc);
+  if(dir == XferLimit::Direction::download)
+    ioc->stream_in(fd);
+  else
+    ioc->stream_out(fd);
+    
+  try {
+    ioc->limit(new XferLimitUser(user,dir,remotename(),_protocol,
+				 filename));
+  } catch (...){
+    fd->release_consumer();
+    delete ioc;
+    delete fd;
+    throw;
+  }
+    
+  start_xfer(ioc,fd);
+}
+
+
+void
+HTTPControl::do_get_file(const Path&file,User::Stat&buf,
+			 User&user,bool actually_send_data)
+{
+  Stream*fd;
+  if(!(fd = user.open(file,O_RDONLY))){
+    error_response("404","Unable to open file");
+    return;
+  }
+  status_line("200","File ready to send");
+  std::string mt = mimetype(file);
+  if(!mt.empty())
+    response_header_line("Content-Type",mt);
+  response_header_line("Content-Length",buf.size());
+  response_header_end();
+
+  if(actually_send_data){
+    start_file_xfer(fd,file.str(),user,XferLimit::Direction::download);
+  } else
+    if(fd) {
+      delete(fd);
+    }
+}
+
+void
+HTTPControl::moved_to_response(const std::string& path)
+{
+  std::string servername = _req_headers["host"];
+  if(servername.empty())
+    servername = _req_uri.authority();
+  if(config().exists("canonical_server_name"))
+    config().get_line("canonical_server_name",servername);
+  if(servername.empty()){
+    error_response("500","Don't know what my canonical server name is");
+    return;
+  }
+
+  std::string replacement = _protocol + "://" + servername + "/" + path;
+  std::string body = std::string("<head><title>To pastures new</title></head>\n"
+				 "<body><h1>Moved far away</h1>\n"
+				 "<P>Now at <A href=\"" + replacement + "\">" + replacement + "</A>.</body>\n");
+  
+  status_line("301","Totally moved far away");
+  response_header_line("Location",replacement);
+  response_header_line("Content-Length",body.size());
+  response_header_line("Content-Type","text/html");
+
+  response_header_end();
+
+  add_response(body);
+  
+  finished_queuing_response();
+}
+
+void
+HTTPControl::do_get_dirlisting(const Path&dir,User&user,bool actually_send_data)
+{
+  FileLister*fl = user.list(dir);
+  status_line("200","File ready to send");
+  response_header_line("Content-Type","text/html");
+  close_after_output(); //no content length so must close
+  response_header_end();
+  
+  if(actually_send_data){
+    IOContextControlled*ioc;
+    try{
+      ioc = new HTTPList(this,fl,user);
+    } catch (...){
+      delete fl;
+      throw;
+    }
+    start_xfer(ioc);
+  }
+}
+
+void
+HTTPControl::do_cmd_get(bool actually_send_data)
 {
   User user;
   authenticate(user);
 
   User::Stat buf;
   Path p = get_uri_path();
-  int fd = -1;
-  FileLister*fl = 0;
   
   if(!user.stat(p,buf)){
     error_response("404","No file by that name");
     return;
   }
-  if(buf.is_dir())
-    fl = user.list(p);
-  else
-    if((fd = user.open(p,O_RDONLY))==-1){
-      error_response("404","Unable to open file");
+  if(buf.is_dir()) {
+    if(!_req_uri_is_dir) {
+      moved_to_response(p.str() + "/");
       return;
     }
-  status_line("200","File ready to send");
-  if(!buf.is_dir()){
-    response_header_line("Content-Length",buf.size());
-  } else {
-    response_header_line("Content-Type","text/html");
-    close_after_output(); //no content length so must close
-  }
-  response_header_end();
-
-  if(actually_send_data){
-    IOContextControlled*ioc;
-    if(fl){
-      try{
-	ioc = new HTTPList(this,fl,user);
-      } catch (...){
-	delete fl;
-	throw;
+    
+    bool no_index_html = false;
+    config().get("no_index_html",no_index_html);
+    if(!no_index_html){
+      Path index(p);
+      index.push_back("index.html");
+      if(user.stat(index,buf)) {
+	do_get_file(index,buf,user,actually_send_data);
+	return;
       }
+    }
+    bool no_dir_listing = false;
+    config().get("no_dir_listing",no_dir_listing);
+    if(!no_dir_listing){
+      do_get_dirlisting(p,user,actually_send_data);
+      return;
     } else {
-      try {
-	ioc = new IOContextXfer(this,get_fd(),fd);
-      } catch (...){
-	::close(fd);
-	throw;
-      }
-    }
-    start_xfer(xt,ioc);
-  } else {
-    if(fl)
-      delete fl;
-    if(fd != -1) {
-      if(::close(fd)){
-	warn("close after HTTP HEAD");
-      }
+      error_response("403","Directory listing forbidden");
+      return;
     }
   }
+  do_get_file(p,buf,user,actually_send_data);
 }
 
 
 void
-HTTPControl::cmd_put(XferTable&xt)
+HTTPControl::cmd_put()
 {
   User user;
   authenticate(user);
@@ -454,21 +528,14 @@ HTTPControl::cmd_put(XferTable&xt)
     return;
   }
 
-  int fd = user.open(p,O_WRONLY|O_CREAT);
-  if(fd == -1){
+  Stream*fd = user.open(p,O_WRONLY|O_CREAT);
+  if(!fd){
     error_response("404","Cannot create file");
     return;
   }
 
-  IOContextControlled*ioc;
-  try{
-    ioc=new IOContextXfer(this,fd,get_fd());
-  } catch (...){
-    ::close(fd);
-    throw;
-  }
+  start_file_xfer(fd,p.str(),user,XferLimit::Direction::upload);
 
-  start_xfer(xt,ioc);
   // XXX should check if being created and return 201 if so
   
   status_line("204","File being written");
@@ -476,7 +543,7 @@ HTTPControl::cmd_put(XferTable&xt)
 }
 
 void
-HTTPControl::cmd_options(XferTable&xt)
+HTTPControl::cmd_options()
 {
   if(has_req_body()){
     // hey this is not even def'd in the 1.1 spec (RFC2616)
@@ -506,7 +573,7 @@ HTTPControl::cmd_options(XferTable&xt)
 }
 
 void
-HTTPControl::cmd_delete(XferTable&xt)
+HTTPControl::cmd_delete()
 {
   User user;
   authenticate(user);
@@ -522,8 +589,92 @@ HTTPControl::cmd_delete(XferTable&xt)
 }
 
 void
-HTTPControl::cmd_trace(XferTable&xt)
+HTTPControl::cmd_trace()
 {
   error_response("501","TRACE not implemented as it is too easy to DoS the server");
 }
 
+    
+void
+HTTPControl::read_in_xfer(Stream&stream,size_t max)
+{
+    made_progress();
+    try{
+      _xfer->read(stream,max);
+    } catch (IOContext::Destroy&){
+      free_xfer();
+    }
+    if(!_xfer)
+      read_in(stream,max);
+}
+
+void
+HTTPControl::read_in(Stream&stream,size_t max)
+{
+  if(_xfer) {
+    read_in_xfer(stream,max);
+    return;
+  }
+  super::read_in(stream,max);
+
+  if(_xfer)
+    read_in_xfer(stream,max);
+}
+
+void
+HTTPControl::write_out_xfer(Stream&stream,size_t max)
+{
+  made_progress();
+  try{
+    _xfer->write(stream,max);
+  } catch (IOContext::Destroy&){
+    free_xfer();
+  }
+  if(!_xfer)
+    return write_out(stream,max);
+}
+
+
+
+void
+HTTPControl::write_out(Stream&stream,size_t max)
+{
+  if(_xfer && !response_ready()){
+    write_out_xfer(stream,max);
+    return;
+  }
+  super::write_out(stream,max);
+  if(_xfer && !response_ready()){
+    write_out_xfer(stream,max);
+  }
+}
+
+bool
+HTTPControl::want_write(Stream&stream)
+{
+  if(!_xfer)return super::want_write(stream);
+  bool ret;
+  try{
+    ret = _xfer->want_write(stream);
+  } catch (const IOContext::Destroy&){
+    free_xfer();
+  }
+  if(!_xfer)
+    return super::want_write(stream);
+  return ret;
+}
+
+bool
+HTTPControl::want_read(Stream&stream)
+{
+  if(!_xfer)return super::want_read(stream);
+  bool ret;
+  try{
+    ret = _xfer->want_read(stream);
+  } catch (const IOContext::Destroy&){
+    free_xfer();
+  }
+  if(!_xfer)
+    return super::want_read(stream);
+  return ret;
+}

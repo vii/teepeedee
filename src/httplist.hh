@@ -11,7 +11,8 @@ class HTTPList:public IOContextList
   
 protected:
   void
-  finished_listing(XferTable&xt);
+  finished_listing();
+  
   void
   prepare_entry()
     ;

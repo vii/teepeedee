@@ -91,13 +91,13 @@ protected:
   }
 
   virtual
-  void // return true if want to read more
+  void
   read_in(Stream&stream,size_t max)
   {
   }
 
   virtual
-  void // return true if want to write more
+  void
   write_out(Stream&stream,size_t max)
   {
   }
@@ -193,6 +193,13 @@ public:
     _timeout_time = 0;
   }
 
+  virtual
+  void // this function is called by IOContextListener when a
+       // connection is made and should not be used to do essential
+       // stuff
+  remote_stream(const Stream&stream)
+  {
+  }  
 		     
   virtual ~IOContext()
   {

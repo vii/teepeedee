@@ -8,13 +8,15 @@
 #include <errno.h>
 #include <err.h>
 #include <fcntl.h>
+#include <string.h>
 
-#include <xfertable.hh>
+#include <sslstreamfactory.hh>
 #include <unixexception.hh>
 #include <confexception.hh>
 #include <iocontextxfer.hh>
 #include <filelisterglob.hh>
 
+#include "xferlimituser.hh"
 #include "ftpcontrol.hh"
 #include "ftpdatalistener.hh"
 #include "ftplist.hh"
@@ -56,45 +58,48 @@ const FTPControl::ftp_cmd FTPControl::ftp_cmd_table[] = {
   cmd(feat,": list optional features supported (as in draft-ietf-ftpext-mlst-16.txt)"),
   cmd(mdtm," <filename>: list time file was modified"),
   cmd(size," <filename>: list size of file"),
+  cmd(eprt," <d><protocol number><d><address><d><port><d>: extended active mode"),
+  cmd(epsv," <protocol number>|ALL: extended passive mode"),
+  cmd(auth," TLS: turn the session into an SSL session"),
+  cmd(pbsz," 0: comply with RFC 2228 before issuing PROT"),
   {0,0,0}
 };
 #undef cmd
 
 
-FTPControl::FTPControl(int fd,const ConfTree&conf)
+FTPControl::FTPControl(const ConfTree&conf,StreamContainer&sc,SSLStreamFactory*ssf)
   :
-  IOContextResponder(fd),
-  _conf(conf),
-  _authenticated(false),
+  Control(conf),
   _data_listener(0),
   _data_xfer(0),
+  _data_xfer_stream(0),
+  _stream_container(sc),
+  _ssl_factory(ssf),
   _restart_pos(0),
-  _quitting(false)
+  _quitting(false),
+  _turning_into_ssl(false),
+  _unencrypted_stream(0)
 {
   std::string greet;
-  
-  {
-    try{
-      getsockname(_port_addr);
-    } catch (UnixException&ue){
-      warnx("getsockname on ftp control fd: %s",ue.what());
-    }
-    _port_addr.sin_port = htons(21);
-  }
-  
-  _conf.get_line("greeting",greet);
-  _conf.get_timeout("timeout_prelogin",*this);
-  make_response("220",greet);
+  config().get("greeting",greet);
+  config().get_timeout("timeout_prelogin",*this);
+  make_response_multiline("220",greet);
 }
 
-FTPControl::events_t
-FTPControl::get_events()
+void
+FTPControl::remote_stream(const Stream&stream)
 {
-  if(_quitting && !closing()){
-    return response_ready() ? POLLOUT : 0;
+  try{
+    stream.getpeername(_port_addr);
+    _port_addr.sin_port = htons(20);
+    stream.getsockname(_local_addr);
+  } catch (const std::exception&e){
+    warnx("unable to get port or pasv details: %s",e.what());
+    make_error("Server not on network");
   }
-  return IOContextResponder::get_events();
+  super::remote_stream(stream);
 }
+
 
 void
 FTPControl::xfer_done(IOContextControlled*xfer,bool success)
@@ -103,6 +108,7 @@ FTPControl::xfer_done(IOContextControlled*xfer,bool success)
     warnx("internal error in FTPControl::xfer_done");
   else{
     _data_xfer = 0;
+    free_xfer();
     if(_quitting)
       close_after_output();
       
@@ -111,38 +117,27 @@ FTPControl::xfer_done(IOContextControlled*xfer,bool success)
     else
       make_response("426","Transfer closed due to error: timeout?");
   }
-  _conf.get_timeout("timeout_postlogin",*this);
+  config().get_timeout("timeout_postlogin",*this);
 }
 
 void
-FTPControl::start_xfer(XferTable&xt,IOContextControlled*xfer)
+FTPControl::start_xfer(IOContextControlled*xfer,Stream*fd)
 {
   if(passive()){
     _data_listener->set_data(xfer);
   } else {
-    xfer->become_ipv4_socket();
-    xfer->set_nonblock();
-    try{
-      xfer->set_reuse_addr();
-      struct sockaddr_in sai;
-      getsockname(sai);
-      xfer->bind_ipv4(sai.sin_addr.s_addr,htons(ntohs(sai.sin_port)-1));
-    } catch (UnixException&ue){
-      warnx("unable to set local transfer port: %s",ue.what());
-    }
-    
-    int ret = connect(xfer->get_fd(),(sockaddr*)&_port_addr,sizeof _port_addr);
-    if(ret == -1){
-      if(errno != EINPROGRESS)
-	throw UnixException("connect to user port");
-    }
-    xt.add(xfer);
+    sockaddr_in sai(_local_addr);
+    sai.sin_port = htons(ntohs(sai.sin_port)-1);
+    Stream*s = Stream::connect((const sockaddr*)&_port_addr,sizeof _port_addr,(const sockaddr*)&sai,sizeof sai);
+    s->consumer(xfer);
+    stream_container().add(s);
   }
 
-  _conf.get_timeout("timeout_xfer",*xfer);
+  _data_xfer = xfer;
+  _data_xfer_stream = fd;
+  config().get_timeout("timeout_xfer",*xfer);
   set_timeout_interval(0);
   
-  _data_xfer = xfer;
   make_response("150","The data is in the post");
 }
 
@@ -162,7 +157,7 @@ get_port_desc_byte(const char*&s)
 }
 
 void
-FTPControl::cmd_dele(XferTable&xt,const std::string&argument)
+FTPControl::cmd_dele(const std::string&argument)
 {
   assert_auth();
   if(!_user.unlink(Path(_path,argument))){
@@ -172,7 +167,24 @@ FTPControl::cmd_dele(XferTable&xt,const std::string&argument)
 }
 
 void
-FTPControl::cmd_rest(XferTable&xt,const std::string&argument)
+FTPControl::free_xfer()
+{
+  {
+    if(_data_xfer_stream){
+      _data_xfer_stream->release_consumer();
+      delete _data_xfer_stream;
+      _data_xfer_stream = 0;
+    }
+    if(passive()){
+      // permit PASV command while data xfer is taking place
+      if(_data_listener->has_data())
+	passive_off();
+    }
+  }
+}
+
+void
+FTPControl::cmd_rest(const std::string&argument)
 {
   assert_auth();
   const char*s = argument.c_str();
@@ -186,13 +198,85 @@ FTPControl::cmd_rest(XferTable&xt,const std::string&argument)
 }
 
 bool
-FTPControl::restart(int fd)
+FTPControl::restart(Stream*fd)
 {
   off_t pos = take_restart_pos();
   
-  if(pos && lseek(fd,pos,SEEK_SET)==-1){
-    ::close(fd);
-    make_response("553","Cannot find the rest position");
+  if(pos){
+    try{
+      fd->seek_from_start(pos);
+    } catch (...){
+      make_response("553","Cannot find the rest position");
+      return false;
+    }
+  }
+  return true;
+}
+
+void
+FTPControl::start_file_xfer(const Path&path,
+			    XferLimit::Direction::type dir)
+{
+  Stream*fd;
+  try{
+    fd = _user.open(path,dir == XferLimit::Direction::upload ? O_WRONLY|O_CREAT
+		    : O_RDONLY);
+  } catch (std::exception&e){
+    make_response("550","File not there");
+    return;
+  }
+
+  IOContextXfer*ioc;
+  if(!restart(fd)){
+    delete fd;
+    return;
+  }
+  try{
+    ioc = new IOContextXfer(this);
+  } catch (...){
+    delete fd;
+    throw;
+  }
+  fd->consumer(ioc);
+  if(dir == XferLimit::Direction::download)
+    ioc->stream_in(fd);
+  else
+    ioc->stream_out(fd);
+    
+  try {
+    ioc->limit(new XferLimitUser(_user,dir,remotename(),"ftp",
+				 path.str()));
+  } catch (...){
+    fd->release_consumer();
+    delete ioc;
+    delete fd;
+    throw;
+  }
+  start_xfer(ioc,fd);
+}
+
+
+void
+FTPControl::cmd_retr(const std::string&argument)
+{
+  assert_auth();
+  assert_no_xfer();
+  start_file_xfer(Path(_path,argument),XferLimit::Direction::download);
+}
+void
+FTPControl::cmd_stor(const std::string&argument){
+  assert_auth();
+  assert_no_xfer();
+  start_file_xfer(Path(_path,argument),XferLimit::Direction::upload);
+}
+
+bool FTPControl::active_on()
+{
+  bool cancel;
+  config().get("no_port_mode",cancel);
+  
+  if(cancel || !passive_off()){
+    make_response("502","Hey! I'm the passive partner here");
     return false;
   }
   return true;
@@ -200,48 +284,10 @@ FTPControl::restart(int fd)
 
 
 void
-FTPControl::cmd_retr(XferTable&xt,const std::string&argument)
+FTPControl::cmd_port(const std::string&argument)
 {
   assert_auth();
-  assert_no_xfer();
-  int fd = _user.open(Path(_path,argument),O_RDONLY);
-  if(fd == -1){
-    make_response("550","File not found");
-    return;
-  }
-    
-  if(!restart(fd))
-    return;
-  
-  IOContextXfer *fdr = new IOContextXfer(this);
-  fdr->set_read_fd(fd);
-  start_xfer(xt,fdr);
-  return;
-}
-void
-FTPControl::cmd_stor(XferTable&xt,const std::string&argument){
-  assert_auth();
-  assert_no_xfer();
-  int fd = _user.open(Path(_path,argument),O_WRONLY|O_CREAT);
-  if(fd == -1){
-    make_response("550","File not found");
-    return;
-  }
-  if(!restart(fd))
-    return;
 
-  IOContextXfer *fdr = new IOContextXfer(this);
-  fdr->set_write_fd(fd);
-  
-  start_xfer(xt,fdr);
-  return;
-}
-
-void
-FTPControl::cmd_port(XferTable&xt,const std::string&argument)
-{
-  assert_auth();
-  assert_no_xfer();
   uint32_t haddr=0;
   uint16_t hport=0;
   const char*s=argument.c_str();
@@ -257,14 +303,11 @@ FTPControl::cmd_port(XferTable&xt,const std::string&argument)
   }
   hport |= get_port_desc_byte(s);
   if(!s)goto syn_error;
-  
-  bool cancel;
-  _conf.get("no_port_mode",cancel);
-  
-  if(cancel || !passive_off(xt)){
-    make_response("502","Hey! I'm the passive partner here");
+
+  if(!active_on()){
     return;
   }
+  memset(&_port_addr,0,sizeof _port_addr);
   _port_addr.sin_family = AF_INET;
   _port_addr.sin_addr.s_addr = htonl(haddr);
   _port_addr.sin_port = htons(hport);
@@ -277,7 +320,7 @@ FTPControl::cmd_port(XferTable&xt,const std::string&argument)
 
 
 void
-FTPControl::do_cmd_list(XferTable&xt,const std::string&argument,bool detailed)
+FTPControl::do_cmd_list(const std::string&argument,bool detailed)
 { // Messy hack central. None of this is spec'd in the RFC 959 but clients expect it
   assert_auth();
   assert_no_xfer();
@@ -307,33 +350,35 @@ FTPControl::do_cmd_list(XferTable&xt,const std::string&argument,bool detailed)
     delete fl;
     throw;
   }
-  start_xfer(xt,fdl);
+  start_xfer(fdl);
   
   return;
 }
 
 void
-FTPControl::cmd_abor(XferTable&xt,const std::string&argument)
+FTPControl::cmd_abor(const std::string&argument)
 {
   assert_auth();
   if(xfer_pending()){
     make_response("426","Terminating due to abort");
     IOContextControlled*dx = _data_xfer;
-    dx->successful();
-    dx->discard_hangup(xt);
+    dx->completed();
+    throw Destroy(dx);
   } else
     make_response("226","Nothing to abort");
   return;
 }
 
 void
-FTPControl::cmd_feat(XferTable&xt,const std::string&argument)
+FTPControl::cmd_feat(const std::string&argument)
 {// defined in draft-ietf-ftpext-mlst-16.txt
   if(!argument.empty()){
     make_response("504","FEAT not implemented with argument");
     return;
   }
   make_response("211-","The following features are supported\r\n"
+		"  AUTH TLS\r\n"
+		"  PBSZ\r\n"
 		"  MDTM\r\n"
 		"  SIZE\r\n"
 		"  MLST Type*;Size*;Modify*;Perm*\r\n"
@@ -344,7 +389,7 @@ FTPControl::cmd_feat(XferTable&xt,const std::string&argument)
 }
 
 void
-FTPControl::cmd_mdtm(XferTable&xt,const std::string&argument)
+FTPControl::cmd_mdtm(const std::string&argument)
 {
   assert_auth();
 
@@ -360,7 +405,7 @@ FTPControl::cmd_mdtm(XferTable&xt,const std::string&argument)
 }
   
 void
-FTPControl::cmd_size(XferTable&xt,const std::string&argument)
+FTPControl::cmd_size(const std::string&argument)
 {
   assert_auth();
 
@@ -381,7 +426,7 @@ FTPControl::cmd_size(XferTable&xt,const std::string&argument)
 }
 
 void
-FTPControl::cmd_mlst(XferTable&xt,const std::string&argument)
+FTPControl::cmd_mlst(const std::string&argument)
 {
   assert_auth();
 
@@ -400,7 +445,7 @@ FTPControl::cmd_mlst(XferTable&xt,const std::string&argument)
 }
 
 void
-FTPControl::FTPControl::cmd_mlsd(XferTable&xt,const std::string&argument)
+FTPControl::FTPControl::cmd_mlsd(const std::string&argument)
 {
   assert_auth();
   assert_no_xfer();
@@ -415,21 +460,27 @@ FTPControl::FTPControl::cmd_mlsd(XferTable&xt,const std::string&argument)
     delete fl;
     throw;
   }
-  start_xfer(xt,fdl);
+  start_xfer(fdl);
 }
 
 void
-FTPControl::cmd_help(XferTable&xt,const std::string&argument) {
-  std::string help = "Commands";
+FTPControl::cmd_help(const std::string&argument) {
+  std::string help;
+  if(argument.empty())
+     help = "Commands";
+  else
+    help = "Help for command " + argument;
+  
   for(const ftp_cmd*i=ftp_cmd_table;i->name;++i)
-    help += std::string("\r\n   ") + i->name + std::string(i->desc);
+    if(argument.empty() || argument == i->name)
+      help += std::string("\r\n   ") + i->name + std::string(i->desc);
 
   make_response("214-",help);
   make_response("214","No more help available");
 }
 
 void
-FTPControl::cmd_cwd(XferTable&xt,const std::string&argument)
+FTPControl::cmd_cwd(const std::string&argument)
 {
   assert_auth();
   Path p(_path,argument);
@@ -439,27 +490,52 @@ FTPControl::cmd_cwd(XferTable&xt,const std::string&argument)
     return;
   }
   _path = p;
-  make_response("250","Directory changed");
+  make_response_multiline("250","Directory changed magnificently\n"+_user.message_directory(_path));
   return;
 }
 
 void
-FTPControl::make_response(const std::string&code,const std::string&str)
+FTPControl::make_response(const std::string&code,const std::string&str,char connect)
 {
-  std::string total = code + " " + str + "\r\n";
+  std::string total = code + connect + str + "\r\n";
 
   add_response(total);
 }
+void
+FTPControl::make_response_multiline(const std::string&code,const std::string&multiline)
+{
+  std::string::size_type size = multiline.size();
+  std::string::size_type start,i;
+  for(start=0,i=0;i<size;++i){
+    if(!multiline[i]) {
+      goto safe_i;
+    }
+    if(multiline[i]=='\n'){
+      if(i+1==size || !multiline[i+1])goto safe_i;
+      if(start){
+	make_response(std::string(),multiline.substr(start,i-start));
+      } else {
+	make_response(code,multiline.substr(start,i-start),'-');
+      }
+      start = i+1;
+    }
+  }
+  if(i)--i;
+ safe_i:
+  make_response(code,multiline.substr(start,i-start));
+}     
 
 FTPControl::~FTPControl()
 {
+  free_xfer();
 }
 
 void
-FTPControl::finished_reading(XferTable&xt,char*buf,size_t len)
+FTPControl::finished_reading(char*buf,size_t len)
 {
-  using std::isspace; // damn gcc-2.95.2
-  using std::iscntrl;
+  using std::isspace; // damn gcc-2.95.2 on debian
+  using std::iscntrl; // damn gcc-2.95.2 on debian
+  using std::tolower; // for NetBSD 1.6
   
   std::string name(buf,len); // yes guaranteed nul terminated
   std::string argument;
@@ -479,13 +555,13 @@ FTPControl::finished_reading(XferTable&xt,char*buf,size_t len)
     if(!isalnum(*i)) // be lazy and ignore control sequences
       i=name.erase(i);
     else{
-      *i = std::tolower(*i);      
+      *i = tolower(*i);      
       ++i;
     }
   }
 
   try{
-    command(name,argument,xt);
+    command(name,argument);
     return;
   } catch (UnixException&e){
     warnx("internal error: %s",e.what());
@@ -501,20 +577,11 @@ FTPControl::login(const std::string&password)
   if(uname.empty())
     return false;
   lose_auth();
-  try{
-    ConfTree users;
-    _conf.get("users",users);
-    
-    if(_user.authenticate(uname,password,users)){
-      _authenticated = true;
 
-      _conf.get_timeout("timeout_postlogin",*this);
-      
-      return true;
-    }
-    
-  } catch (std::exception&e){
-    warnx("error for user trying to login: %s",e.what());
+
+  if(user_login(_user,uname,password)){
+    config().get_timeout("timeout_postlogin",*this);
+    return true;
   }
   
   return false;
@@ -523,12 +590,12 @@ FTPControl::login(const std::string&password)
 
 
 void
-FTPControl::command(const std::string&cmd,const std::string& argument,XferTable&xt)
+FTPControl::command(const std::string&cmd,const std::string& argument)
 {
   try{
     for(const ftp_cmd*i=ftp_cmd_table;i->name;++i)
       if(cmd == i->name) {
-	(this->*i->function)(xt,argument);
+	(this->*i->function)(argument);
 	return;
       }
   } catch (User::AccessException&){
@@ -550,12 +617,11 @@ FTPControl::command(const std::string&cmd,const std::string& argument,XferTable&
 }
 
 bool
-FTPControl::passive_off(XferTable&xt)
+FTPControl::passive_off()
 {
   if(passive()){
-    _data_listener->hangup(xt);
+    _data_listener->free();
     _data_listener = 0;
-    return true;
   }
   return true;
 }
@@ -574,65 +640,200 @@ comma_dump_addr(const struct sockaddr_in& addr)
 }
 
 bool
-FTPControl::passive_on(XferTable&xt)
+FTPControl::passive_on(bool epsv)
 {
   // always reinitialize passive mode as the accept queue created by the
   // FTPDataListener might have been mangled by the client
-  
-  // XXX is it not sufficient to simply eat all the accepts? - I'm
-  // worried about possibility of delayed packets coming
-  
   if(passive())
-    passive_off(xt);
+    passive_off();
   
   bool cancel;
-  _conf.get("no_passive_mode",cancel);
+  config().get("no_passive_mode",cancel);
   if(cancel)
     return false;
   int px = 65535,pn = IPPORT_RESERVED;
-  if(_conf.exists("passive_port_min")){
-    _conf.get("passive_port_min",pn);
-  }
-  if(_conf.exists("passive_port_max")){
-    _conf.get("passive_port_max",px);
-  }
-
+  config().get_if_exists("passive_port_min",pn);
+  config().get_if_exists("passive_port_max",px);
 
   _data_listener = new FTPDataListener;
+  _data_listener->stream_container(&stream_container());
+  Stream*s;
   try{
-    struct sockaddr_in sai;
-    getsockname(sai);
-    
-    _data_listener->bind_ipv4(sai.sin_addr.s_addr,pn,px);
-    _data_listener->listen();
-  } catch (UnixException&ue){
-    if(_data_listener){
-      delete _data_listener;
-      _data_listener = 0;
-    }
-    warnx("unable to bind passive listener: %s",ue.what());
+    s=Stream::listen_ipv4_range(_local_addr.sin_addr.s_addr,pn,px);
+    s->consumer(_data_listener);
+  } catch (...){
+    delete _data_listener;
+    _data_listener = 0;
+    warnx("unable to bind passive listener");
     return false;
   }
-  xt.add(_data_listener);
+  stream_container().add(s);
 
-  struct sockaddr_in addr;
-  _data_listener->getsockname(addr);
-
-  make_response("227",std::string("Entering Passive Mode. (")+
+  sockaddr_in addr;
+  s->getsockname(addr);
+  if(epsv){
+    std::ostringstream oss;
+    oss << ntohs(addr.sin_port) << "|)";
+    make_response("229","Entering Extended Passive Mode (|||"+oss.str());
+  }else
+    make_response("227",std::string("Entering Passive Mode. (")+
 		comma_dump_addr(addr)
     +")");
   return true;
 }
 
 
-void
-FTPControl::hangup(class XferTable&xt)
+bool
+FTPControl::stream_hungup(Stream&stream)
 {
   if(passive())
-    passive_off(xt);
+    passive_off();
   if(xfer_pending())
     _data_xfer->detach();
 
-  super::hangup(xt);
+  super::stream_hungup(stream);
+  return true;
+}
+
+void
+FTPControl::cmd_pass(const std::string&argument)
+{
+  if(_username.empty()){
+    make_response("503","Who's there?");
+    return;
+  }
+  try {
+    if(!login(argument)){
+      make_response("530","You are not everything you claim to be");
+    } else {
+      make_response_multiline("230",_user.message_login());
+    }
+  } catch (const LimitException&){
+    make_response("530","Too many users in this class are logged in, try again later");
+  }
+}
+
+void
+FTPControl::cmd_epsv(const std::string&argument)
+{
+  assert_auth();
+
+  if(argument.empty()
+     || !strcasecmp(argument.c_str(),"1")){
+    passive_on(true);
+    return;
+  }
+  if(!strcasecmp(argument.c_str(),"all")) {
+    make_response("501","RFC 2428 makes proper support for EPSV ALL hasslesome so it isn't suppored");
+    return;
+  }
+  make_response_proto_not_supported();
+}
+
+void
+FTPControl::cmd_eprt(const std::string&argument)
+{
+  assert_auth();
+  if(argument.empty()) {
+    make_response("501","Empty extended port argument - time for some sherry?");
+    return;
+  }
+
+  if(!active_on())
+    return;
+  memset(&_port_addr,0,sizeof _port_addr);
+  
+  const char*str=argument.c_str();
+  char delim = *str++;
+  char prot = *str++;
+  if(prot == 0||prot ==delim){
+    make_response("501","No protocol specified for port (pass it left)");
+    return;
+  }
+  switch(prot){
+    case '1':
+      _port_addr.sin_family = AF_INET;
+      break;
+  default:
+    make_response_proto_not_supported();
+    return;
+  }
+  if(*str++ != delim){
+    make_response_proto_not_supported();
+  }
+  std::string address;
+  while(*str && *str!=delim)
+    address += *str++;
+
+  if(inet_pton(_port_addr.sin_family,address.c_str(),&_port_addr.sin_addr.s_addr)<=0){
+    make_response("501","Invalid address, wrong side of town");
+    return;
+  }
+  
+  if(!*str++){
+    make_response("501","No port? No cigars? Call this a dinner party?");
+    return;
+  }
+  
+  char*tail;
+  unsigned long port = strtoul(str,&tail,10);
+  if(tail == str || *tail != delim){
+    make_response("501","Bad port received (leading to gout)");
+    return;
+  }
+  _port_addr.sin_port = htons(port);
+  make_response("200","Always happy to see a new port");
+}
+
+void
+FTPControl::cmd_auth(const std::string&argument)
+{
+  if(!strcasecmp(argument.c_str(),"tls")
+     ||!strcasecmp(argument.c_str(),"tls-c")) {
+    if(!_ssl_factory){
+      make_response("534","Not configured for TLS (no keys?)");
+      return;
+    }
+    make_response("234","Now happily talking TLS");
+    _turning_into_ssl = true;
+    return;
+  }
+  make_response("504","Only know about AUTH TLS");
+}
+void
+FTPControl::read_in(Stream&stream,size_t max)
+{
+  if(_turning_into_ssl&&!response_ready()){
+    _turning_into_ssl = false;
+    if(!_unencrypted_stream){
+      _unencrypted_stream = &stream;
+    }
+    Stream*ns;
+    IOContext*saved = stream.consumer();
+    stream.release_consumer();
+    try{
+      ns=_ssl_factory->new_stream(&stream,stream_container());
+    } catch (...){
+      stream.consumer(saved);
+      throw;
+    }
+    ns->consumer(saved);
+    stream_container().add(ns);
+  } else
+    super::read_in(stream,max);
+}
+
+void
+FTPControl::cmd_pbsz(const std::string&argument)
+{
+  if(!encrypted()){
+    make_response("503","Cannot protect an unencrypted stream");
+    return;
+  }
+  if(argument != "0"){
+    make_response("501","PBSZ=0");
+    return;
+  }
+  make_response("200","RFC 2228 - what a waste of time");
 }
 

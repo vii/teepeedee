@@ -3,11 +3,11 @@
 
 #include <string>
 #include "iocontext.hh"
-#include "streamtable.hh"
+#include "streamcontainer.hh"
 
 class IOContextListener:public IOContext
 {
-  StreamTable*_table;
+  StreamContainer*_table;
   
 protected:
   void
@@ -16,18 +16,19 @@ protected:
     while(Stream*s=do_accept(stream)){
       Stream*t;
       try {
-	t= new_stream(s,*_table);
+	t= new_stream(s,stream_container());
       } catch (...){
 	delete s;
 	throw;
       }
       try{
 	t->consumer(new_iocontext());
-	(*_table).add(t);
-      } catch (...){
+	stream_container().add(t);
+      } catch (...) {
 	delete t;
 	throw;
       }
+      t->consumer()->remote_stream(*s);
     }
   }
 public:
@@ -36,11 +37,11 @@ public:
   }
 
   void
-  stream_container(StreamTable*table)
+  stream_container(StreamContainer*table)
   {
     _table=table;
   }
-  StreamTable&
+  StreamContainer&
   stream_container()
   {
     return *_table;
@@ -65,7 +66,7 @@ public:
 
   virtual
   Stream*
-  new_stream(Stream*source,StreamTable&table)
+  new_stream(Stream*source,StreamContainer&table)
   {
     return source;
   }

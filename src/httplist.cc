@@ -14,10 +14,18 @@ HTTPList::HTTPList(IOController*fc,FileLister*fl,const User&u)  :
   if(!p.empty())
     p.pop_back();
   std::string name = p.str();
-  set_entry("<head><title>Directory listing of " + name + "/</title></head>\n"
-	    "<body><h1>Directory listing of " + name + "/</h1>\n"
-	    "<ul>\n"
-	    );
+  std::string head = "<head><title>Directory listing of " + name + "/</title></head>\n"
+	    "<body>\n";
+
+  std::string welcome = _user.message_login();
+  if(!welcome.empty())
+    head += "<pre>" + welcome + "</pre>\n";
+  head += "<h1>Directory listing of " + name + "/</h1>\n";
+  welcome = _user.message_directory(p);
+  if(!welcome.empty())
+    head += "<pre>" + welcome + "</pre>\n";
+  head += "<ul>\n";
+  set_entry(head);
 }
 
 void
@@ -45,12 +53,12 @@ HTTPList::prepare_entry()
 }
 
 void
-HTTPList::finished_listing(XferTable&xt)
+HTTPList::finished_listing()
 {
   if(!_finished){
     set_entry("</ul></body>");
     _finished = true;
   } else {
-    IOContextList::finished_listing(xt);
+    IOContextList::finished_listing();
   }
 }

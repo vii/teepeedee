@@ -129,9 +129,11 @@ Sendfile::read_in()
   _buf->pos = 0;
   _buf->len = 0;
   for(;;){
-    ret  = _in->read(_buf->buffer,sizeof _buf->buffer);
-    if(ret == 0)
+    try{
+      ret  = _in->read(_buf->buffer,sizeof _buf->buffer);
+    } catch (const Stream::ClosedException&){
       return true;
+    }
     if(ret == -1)
       return false;
     _buf->len = ret;

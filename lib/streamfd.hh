@@ -37,37 +37,6 @@ class StreamFD : public Stream
     if(-1 == ::setsockopt(fd(),LEVEL,OPTNAME,OPTVAL,OPTLEN))
       throw UnixException("setsockopt");
   }
-  void
-  getsockname(struct sockaddr_in&sai)const
-  {
-    socklen_t len = sizeof sai;
-    getsockname(&sai,&len);
-  }
-  void
-  getsockname(void*addr,socklen_t*len)const
-  {
-    if(::getsockname(fd(),(sockaddr*)addr,len))
-      throw UnixException("getsockname"); //cannot ref desc as that uses getsockname
-  }
-  std::string
-  getsockname()const
-    ;
-  void
-  getpeername(struct sockaddr_in&sai)const
-  {
-    socklen_t len = sizeof sai;
-    getpeername(&sai,&len);
-  }
-  void
-  getpeername(void*addr,socklen_t*len)const
-  {
-    if(::getpeername(fd(),(sockaddr*)addr,len))
-      throw UnixException("getpeername");
-  }
-  std::string
-  getpeername()const
-    ;
-  
   
   void
   shutdown()
@@ -146,8 +115,12 @@ public:
     if(ret == -1){
       if(errno == EAGAIN)
 	return -1;
+      if(errno == ECONNRESET || errno == ENETRESET)
+	throw ClosedException();
       throw UnixException("read");
     }
+    if(ret == 0)
+      throw ClosedException();
     return ret;
   }
   virtual
@@ -161,6 +134,8 @@ public:
     if(ret == -1){
       if(errno == EAGAIN)
 	return -1;
+      if(errno == ECONNRESET || errno == ENETRESET)
+	throw ClosedException();
       throw UnixException("write");
     }
     return ret;
@@ -171,14 +146,31 @@ public:
   }
   std::string
   localname()const
-  {
-    return getsockname();
-  }
+    ;
+  
   std::string
   remotename()const
+    ;
+  
+  void
+  getsockname(void*addr,socklen_t*len)const
   {
-    return getpeername();
+    if(::getsockname(fd(),(sockaddr*)addr,len))
+      throw UnixException("getsockname"); //cannot ref desc as that uses getsockname
   }
+  void
+  getpeername(void*addr,socklen_t*len)const
+  {
+    if(::getpeername(fd(),(sockaddr*)addr,len))
+      throw UnixException("getpeername");
+  }
+  void
+  seek_from_start(off_t pos)
+  {
+    if(::lseek(fd(),pos,SEEK_SET)==-1)
+      throw UnixException("lseek");
+  }
+
   virtual
   bool
   ready_to_read()

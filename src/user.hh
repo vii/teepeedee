@@ -4,18 +4,35 @@
 #include <string>
 #include <exception>
 #include <ctime>
+#include <iostream>
 
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <xferlimit.hh>
 #include <conftree.hh>
+#include <xferlimitexception.hh>
 class Path;
 class FileLister;
+class Stream;
 
-class User 
+class User
 {
+  typedef float ratio_t;
+  
   ConfTree _conf;
+  std::string _name;
+
+  // this field only signals whether this particular authentication
+  // object was explicitly initialised with user_login and should decrement
+  // the number of logins of the user when destroyed
+  bool _authenticated;
+
+  int open_fd(const Path&fname,int flags,mode_t mode=0664)
+    ;
+  
   std::string
   get_root()const
   {
@@ -88,16 +105,43 @@ class User
   {
     return may_create(path);
   }
-  
+
+  ratio_t
+  upload_ratio()
+  {
+    ratio_t rat = 0;
+    _conf.get_if_exists("upload_ratio",rat);
+    return rat;
+  }
 public:
   class Stat;
 private:
   bool
   check_access(const Stat&buf,access::type type,access::node_type node_type)
   ;
-public:  
+  
+public:
+  User():_authenticated(false)
+  {
+  }
+  User(const User&u):_conf(u._conf),_authenticated(false)
+  {
+  }
+
+  std::string
+  username()const
+  {
+    return _name;
+  }
+
+  bool authenticated()const
+  {
+    return _authenticated;
+  }
+  
+  
   // flags may not include O_RDWR
-  int open(const Path&fname,int flags,mode_t mode=0664)
+  Stream* open(const Path&fname,int flags,mode_t mode=0664)
     ;
 
   class AccessException
@@ -108,7 +152,7 @@ public:
       return "permission denied";
     }
   };
-
+  
   bool stat(const Path&path,Stat&buf)
     ;
   bool unlink(const Path&path);
@@ -118,12 +162,57 @@ public:
   
   bool rename(const Path&from,const Path&to)
     ;
-  
+
   bool authenticate(const std::string&username,
 		    const std::string&password,
 		    const ConfTree&usersdb)
     ;
+  void deauthenticate()
+    ;
+  ~User()
+  {
+    deauthenticate();
+  }
+  
+  off_t
+  xfer_total(XferLimit::Direction::type dir,bool do_lock=true)
+  {
+    std::string name = XferLimit::Direction::to_string(dir)+"_bytes";
+    off_t current = 0;
+    _conf.get_atomically_if_exists(name,current);
 
+    return current;
+  }
+  
+  off_t
+  xfer_limit(XferLimit::Direction::type dir)
+  {
+    std::string name = XferLimit::Direction::to_string(dir)+"_bytes_max";
+    off_t ret = 0;
+    _conf.get_if_exists(name,ret);
+    if(dir==XferLimit::Direction::download){
+      ratio_t ratio = upload_ratio();
+      if(!ratio)
+	return ret;
+      ret += off_t(ratio * xfer_total(XferLimit::Direction::upload));
+    }
+    return ret;
+  }    
+  
+  bool
+  book_xfer(off_t bytes,XferLimit::Direction::type dir)
+  {
+    return _conf.book_increment(XferLimit::Direction::to_string(dir)+"_bytes",xfer_limit(dir),bytes);
+  }
+  std::string
+  message_login()
+    ;
+  std::string
+  message_limits()
+    ;
+  std::string
+  message_directory(const Path&path)
+    ;
 
   // returned filelister should be deleted
   FileLister*
@@ -241,7 +330,14 @@ public:
       return _stat.st_mtime;
     }
   };
-  
+private:
+  void
+  do_print_limit(std::ostream&limits,XferLimit::Direction::type dir)
+    ;
+  bool verify_password(const std::string&username,
+		    const std::string&password,
+		    const ConfTree&usersdb)
+    ;
 };
 
 #endif

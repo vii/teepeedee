@@ -2,18 +2,17 @@
 #include <iomanip>
 #include <unistd.h>
 #include <sys/poll.h>
-#include <sys/time.h>
 #include <errno.h>
 #include <err.h>
-#include <time.h>
 #include <assert.h>
 
+#include "time.hh"
 #include "iocontextresponder.hh"
 
 void
 IOContextResponder::read_done(Stream&stream)
 {
-  std::cerr << "<< " << stream.remotename() << ": " << std::string(_buf,_buf_write_pos) << std::endl;
+  std::cerr << "<< " << remotename() << ": " << std::string(_buf,_buf_write_pos) << std::endl;
   unsigned tmp = _buf_write_pos;
   prepare_read();
   //might throw exception
@@ -60,10 +59,6 @@ IOContextResponder::read_in(Stream&stream,size_t max)
     switch(retval){
     case -1:
       return;
-    case 0:
-      *start = 0;
-      hangup(stream);
-      return;
     case 1:
       if(*start == '\n'){
 	// permit both \r\n and \n for Mr Plato
@@ -85,31 +80,27 @@ IOContextResponder::read_in(Stream&stream,size_t max)
 }
 
 void
-IOContextResponder::report_connect()
+IOContextResponder::report(bool connecting)
 {
-  struct timeval tv;
+  Time now;
   char buf[50];
+  now.strftime(buf,sizeof buf,"%a, %d %b %Y %H:%M:%S");
   
-  if(gettimeofday(&tv,0))
-    warn("gettimeofday");
-
-  time_t t = tv.tv_sec;
-  if(!strftime(buf,sizeof buf,"%a, %d %b %Y %H:%M:%S",gmtime(&t))){
-    warn("strftime");
-    buf[0]=0;
-  }
+  std::cerr << (connecting ?"+++ ": "--- ") << remotename() << ' ';
+  if(connecting)
+    std::cerr << "connecting to " << desc();
+  else
+    std::cerr <<"closed";
   
-  std::cerr << "+++ " 
-	    << " connecting to " << desc()
-	    << " at " << buf << '.'
-	    << std::setw(6) << std::setfill('0') << tv.tv_usec
-	    << std::endl;
+  std::cerr<< " at " << buf << '.'
+	   << std::setw(6) << std::setfill('0') << now.microseconds()
+	   << std::endl;
 }
 
 void
 IOContextResponder::finished_writing()
 {
-  std::cerr << ">> : " << _response << std::flush;
+  std::cerr << ">> " <<  remotename() << ": " <<_response << std::flush;
   _response = std::string();
   prepare_io();
 }

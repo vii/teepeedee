@@ -1,13 +1,11 @@
-#include <xfertable.hh>
-
 #include "serverhttp.hh"
 #include "httpcontrol.hh"
+#include "serverregistration.hh"
 
-bool
-ServerHTTP::new_connection(int newfd,XferTable&xt)
+static ServerRegistration registration("http",ServerHTTP::factory,"HTTP web server");
+
+IOContext*
+ServerHTTP::new_iocontext()
 {
-  HTTPControl*httpc = new HTTPControl(newfd,config());
-  
-  xt.add(httpc);
-  return true;
+  return new HTTPControl(config());
 }

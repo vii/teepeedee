@@ -14,8 +14,9 @@ class IOContextControlled:public virtual IOContext
     if(!_control)
       return;
 
-    _control->xfer_done(this,happy);
+    IOController*tmp=_control;
     detach();
+    tmp->xfer_done(this,happy);
   }
 public:
   IOContextControlled(IOController*c):_control(c)

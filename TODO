@@ -1,20 +1,13 @@
-* hook ftp up with streams
-* fix httpcontrol so it knows whether it should say https:// or http://
-* do xferlog format
-* put ftp back
-* make sure files in CVS are sync'd up
+* make definitely sure files in CVS and Makefile.am are sync'd up
+* document options
 
 * http content-range resume
 * generally make more http spec compliant
-* ftp auth tls
 
 * http name based virtual hosts
 * test harder
 * safely bind to privileged ports
 
-* do something about stream,table being passed around all the time
-	 unnecessarily
-* document options
 * smp optimization
 * maybe add realpath checking
 * do something about brute force password attacks
@@ -25,4 +18,5 @@
 * IPv6
 * implement ftp STAT properly
 * implement ftp OPTS
-
+* implement ftp ssl PROT
+* fix ftp REIN to close ssl connection

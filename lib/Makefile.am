@@ -12,7 +12,8 @@ libteepeedee_a_SOURCES = streamtable.cc \
 	uri.cc \
 	dircontainer.cc \
 	stream.cc \
-	streamfd.cc
+	streamfd.cc \
+	sslstreamfactory.cc
 
 
 

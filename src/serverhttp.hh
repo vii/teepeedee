@@ -6,9 +6,8 @@
 class ServerHTTP : public Server
 {
 public:
-
-  bool
-  new_connection(int newfd,XferTable&xt)
+  IOContext*
+  new_iocontext()
     ;
 
   static
@@ -22,7 +21,7 @@ public:
   {
     return "http " + Server::desc();
   }
-  
+
 };
 
 

@@ -1,12 +1,12 @@
+#include <sstream>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <cstdio>
 
 #include <unistd.h>
 #include <err.h>
 #include <sys/stat.h>
-
-#include "config.h"
 
 #ifdef HAVE_CRYPT_H
 #include <crypt.h>
@@ -17,13 +17,29 @@
 #include <filelisterdir.hh>
 #include <filelisterfile.hh>
 #include <filelisternone.hh>
+#include <limitexception.hh>
+#include <streamfd.hh>
 
 #include "user.hh"
 
 static const unsigned max_username_length = 200;
 
-int
+
+
+Stream*
 User::open(const Path&fname,int flags,mode_t mode)
+{
+  int fd = open_fd(fname,flags,mode);
+  try{
+    return new StreamFD(fd);
+  } catch(...){
+    close(fd);
+    throw;
+  }
+}
+
+int
+User::open_fd(const Path&fname,int flags,mode_t mode)
 {
   bool exist = exists(fname);
   if((flags&O_ACCMODE) == O_WRONLY) {
@@ -31,6 +47,10 @@ User::open(const Path&fname,int flags,mode_t mode)
        // obvious race!
        || (!exist && !may_createfile(fname)))
       throw AccessException();
+    off_t max = xfer_limit(XferLimit::Direction::upload);
+    off_t current = xfer_total(XferLimit::Direction::upload);
+    if(current >= max)
+      throw XferLimitException();
   } else if (!exist)
     throw AccessException();
   
@@ -40,7 +60,7 @@ User::open(const Path&fname,int flags,mode_t mode)
 
   int fd = ::open(get_path(fname).c_str(),flags,mode);
   if(fd == -1)
-    return fd;
+    throw UnixException("open");
 
   Stat buf;
   if(!buf.fstat(fd)){
@@ -114,9 +134,32 @@ bool User::may_stat(const Path&path)
   return may_listdir(parent);
 }
 
-
 bool
 User::authenticate(const std::string&username,
+		   const std::string&password,
+		   const ConfTree&usersdb)
+{
+  if(!verify_password(username,password,usersdb))
+    return false;
+  if(!_conf.book_increment("logins",1)){
+    throw LimitException();
+  }
+  _name = username;
+  _authenticated = true;
+  return true;
+}
+
+void
+User::deauthenticate()
+{
+  if(_authenticated){
+    _authenticated = false;
+    _conf.book_decrement("logins",1);
+  }
+}
+
+bool
+User::verify_password(const std::string&username,
 		   const std::string&password,
 		   const ConfTree&usersdb)
 {
@@ -156,6 +199,7 @@ User::authenticate(const std::string&username,
       // have to use strcmp as one of these may not be nul-terminated
       if(!std::strcmp(real_password.c_str(),password.c_str()))
 	return true;
+      return false;
     }
     
     _conf.get_line("password",real_password);
@@ -280,3 +324,86 @@ User::rmdir(const Path&path)
     throw AccessException();
   return !::rmdir(get_path(path).c_str());
 }
+
+std::string
+User::message_login()
+{
+  std::string welcome;
+  _conf.get_if_exists("msg_welcome",welcome);
+  
+  return message_limits() + welcome;
+}
+
+void
+User::do_print_limit(std::ostream&limits,XferLimit::Direction::type dir)
+{
+  off_t max=0, current=0;
+  max = xfer_limit(dir);
+  if(!max)
+    limits << "There is no " << XferLimit::Direction::to_string(dir) << " limit.";
+  else {
+    limits << "The " << XferLimit::Direction::to_string(dir) << " limit was " << max << " bytes.";
+  }
+  try{
+    current = xfer_total(dir);
+    //    limits << " Already " << current << " bytes have been " << XferLimit::Direction::to_string(dir) << "ed.";
+    if(max){
+      if(current >= max){
+	limits << " You may not " << XferLimit::Direction::to_string(dir) << " anything.";
+      } else {
+	limits << " You may now " << XferLimit::Direction::to_string(dir) << " " << max - current << " bytes.";
+      }
+    }
+  }catch(ConfException&){
+  }
+
+  limits << '\n';
+}
+  
+
+std::string
+User::message_limits()
+{
+  std::ostringstream limits;
+  do_print_limit(limits,XferLimit::Direction::download);
+  ratio_t rat = upload_ratio();
+  if(rat)
+    limits << "For every byte you upload you may download " << rat << " more bytes.\n";
+  do_print_limit(limits,XferLimit::Direction::upload);
+  
+  {
+    int max=0,cur=0;
+    _conf.get_if_exists("logins_max",max);
+    _conf.get_atomically_if_exists("logins",cur);
+    limits << "There are " << cur << " users in your class logged in.";
+    if(max) {
+      limits << " The limit is " << max << " logins.";
+    }
+    limits << '\n';
+  }
+
+  return limits.str();
+}
+
+std::string
+User::message_directory(const Path&path)
+{
+  std::string ret;
+  try{
+    Path index(path);
+    index.push_back(".index");
+    int fd=open_fd(index,O_RDONLY);
+    char buf[8000];
+    std::FILE*stream=fdopen(fd,"r");
+    size_t s=fread(buf,1,sizeof(buf)-1,stream);
+    if(ferror(stream))
+      warnx("error reading directory index \"%s\"",get_path(index).c_str());
+    fclose(stream);
+    buf[s] = 0;
+    ret = buf;
+  }
+  catch(...){
+  }
+  return ret;
+}
+

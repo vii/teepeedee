@@ -1,5 +1,9 @@
-#ifndef _TEEPEEDEE_LIB_FILTEROPENSSL_HH
-#define _TEEPEEDEE_LIB_FILTEROPENSSL_HH
+#ifndef _TEEPEEDEE_LIB_IOCONTEXTOPENSSL_HH
+#define _TEEPEEDEE_LIB_IOCONTEXTOPENSSL_HH
+
+#ifndef _TEEPEEDEE_LIB_IOCONTEXTOPENSSL_I_KNOW_ABOUT_OPENSSL
+#error Sorry, to you I do not exist
+#endif
 
 #include <err.h>
 #include <openssl/bio.h>

@@ -11,14 +11,15 @@
 class IOContextResponder : public IOContextWriter 
 {
   typedef IOContextWriter super;
-  
+
+  std::string _remotename;
   std::string _response;
   char _buf[2000];
   unsigned _buf_write_pos;
   bool _closing;
 
   void
-  report_connect()
+  report(bool connecting=true)
     ;
   
 
@@ -31,13 +32,13 @@ class IOContextResponder : public IOContextWriter
     _buf_write_pos = 0;
   }
   
-  void
-  input_line_too_long()
-  {
-    delete_this();
-  }
 
 protected:
+  ~IOContextResponder()
+  {
+    report(false);
+  }
+  
   void
   read_in(Stream&stream,size_t max)
     ;
@@ -72,6 +73,12 @@ protected:
   void
   finished_reading(char*buf,size_t len)
     =0;
+  virtual
+  void
+  input_line_too_long()
+  {
+    delete_this();
+  }
   
   void
   add_response(const std::string&resp)
@@ -81,6 +88,11 @@ protected:
       move_write_buf(_response.c_str(),_response.length());
     else
       prepare_io();
+  }
+  std::string
+  remotename()const
+  {
+    return _remotename;
   }
 public:
   IOContextResponder():
@@ -99,6 +111,12 @@ public:
     if(!response_ready())
       return true;
     return false;
+  }
+  void
+  remote_stream(const Stream&stream)
+  {
+    _remotename = stream.remotename();
+    report();
   }
   
 };

@@ -1,13 +1,11 @@
-#include <xfertable.hh>
-
 #include "serverftp.hh"
 #include "ftpcontrol.hh"
+#include "serverregistration.hh"
 
-bool
-ServerFTP::new_connection(int newfd,XferTable&xt)
+static ServerRegistration registration("ftp",ServerFTP::factory,"FTP file server");
+
+IOContext*
+ServerFTP::new_iocontext()
 {
-  FTPControl*ftpc = new FTPControl(newfd,config());
-  
-  xt.add(ftpc);
-  return true;
+  return new FTPControl(config(),stream_container(),_ssl_available?this:0);
 }

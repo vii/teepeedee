@@ -57,11 +57,11 @@ protected:
   void
   finished_writing()
   {
-    next_entry();
     if(no_entries_left()) {
       finished_listing();
       return;
     }
+    next_entry();
   }
   virtual
   void

@@ -10,7 +10,6 @@ class FTPMlstPrinter
 {
   User _user;
 public:
-  
   FTPMlstPrinter(const User&u):_user(u)
   {
   }
@@ -33,7 +32,7 @@ public:
   std::string
   line(const Path&p)
   {
-    return facts(p) + "; " + p.str();
+    return facts(p) + "; /" + p.str();
   }
   
   std::string

@@ -1,4 +1,5 @@
 #include <exception>
+#include <list>
 
 #include <cstdlib>
 #include <ctime>
@@ -6,20 +7,21 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#ifdef HAVE_OPENSSL
+#include <openssl/ssl.h>
+#endif
 
-#include <xfertable.hh>
+#include <streamtable.hh>
 #include <dircontainer.hh>
 #include <confexception.hh>
 #include <unixexception.hh>
+#include "serverregistration.hh"
 
-#include "serverftp.hh"
-#include "serverhttp.hh"
-
-#include "config.h"
+ServerRegistration* ServerRegistration::registered_list;
 
 static
 void
-load_servers(XferTable&xt,const std::string&path,Server::Factory factory)
+load_servers(StreamTable&xt,const std::string&path,Server::Factory factory)
 {
   
   DirContainer configs(path);
@@ -27,30 +29,31 @@ load_servers(XferTable&xt,const std::string&path,Server::Factory factory)
   for(DirContainer::iterator i = configs.begin(); i != configs.end(); ++i){
     Server *fl = factory();
     std::string cfg = configs.name() + "/" + *i;
-
+    fl->stream_container(&xt);
     try {
-      fl->read_config(cfg);
-      xt.add(fl);
+      xt.add(fl->read_config(cfg));
     }
     catch(std::exception&e){
       warnx("%s",e.what());
-      errx(1,"server config \"%s\" bad",cfg.c_str());
+      warnx("server config \"%s\" bad",cfg.c_str());
+      delete fl;
     }
   }
 }
-
 
 static
 void
 start_servers(const std::string&configdir)
 {
-  XferTable xt;
+  StreamTable xt;
 
-  load_servers(xt,configdir+ "/ftp",ServerFTP::factory);
-  load_servers(xt,configdir+ "/http",ServerHTTP::factory);
+  for(ServerRegistration* i=ServerRegistration::registered_list;
+      i;i=i->next()){
+    load_servers(xt,configdir+ "/" + (*i).name(),(*i).factory());
+  }
   
   if(xt.empty())
-    errx(1,"no servers specified in \"%s\"",configdir.c_str());
+    errx(1,"no valid servers specified in \"%s\"",configdir.c_str());
   
   xt.poll();
   errx(1,"all servers died");
@@ -75,12 +78,24 @@ set_umask()
   umask(0002);
 }
 
+static
+void
+setup_openssl()
+{
+#ifdef HAVE_OPENSSL  
+  SSL_load_error_strings();
+  SSL_library_init();
+#endif
+}
+
+
 int main(int argc,char*argv[])
 {
   try{
     std::srand(std::time(0));
     set_signals();
     set_umask();
+    setup_openssl();
     start_servers((argc > 1 && argv[1]) ? argv[1] : TPD_CONFIGDIR);
   } catch(std::bad_exception&be){
     errx(1,"bad exception: %s",be.what());

@@ -3,29 +3,33 @@ sbin_PROGRAMS = teepeedee
 
 
 teepeedee_SOURCES = main.cc \
-	ftpcontrol.cc \
 	user.cc \
-	ftpdatalistener.cc \
-	ftplistlong.cc \
-	serverftp.cc \
 	serverhttp.cc \
 	server.cc \
 	httpcontrol.cc \
-	httplist.cc
+	httplist.cc \
+	control.cc \
+	serverhttps.cc \
+	serverftp.cc \
+	ftpcontrol.cc \
+	ftpdatalistener.cc \
+	ftplistlong.cc
 
 
 
 
-noinst_HEADERS = ftpcontrol.hh \
-	user.hh \
-	ftpdatalistener.hh \
-	ftplist.hh \
-	ftplistlong.hh \
-	serverftp.hh \
+noinst_HEADERS =	user.hh \
 	serverhttp.hh \
 	server.hh \
 	httpcontrol.hh \
 	httplist.hh \
+	control.hh \
+	serverregistration.hh \
+	serverhttps.hh \
+	ftpcontrol.hh \
+	ftpdatalistener.hh \
+	ftplist.hh \
+	ftplistlong.hh \
 	ftplistmlsd.hh \
 	ftpmlstprinter.hh
 

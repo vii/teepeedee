@@ -6,11 +6,13 @@
 #include <map>
 #include <set>
 
+
+#include "streamcontainer.hh"
 class Stream;
 class StreamFD;
 class IOContext;
 
-class StreamTable
+class StreamTable:public StreamContainer
 {
   typedef std::list<Stream*> _streams_type;
   _streams_type _streams;
@@ -44,6 +46,18 @@ class StreamTable
     _deleted_streams.clear();
   }
   void
+  remove(Stream*s)
+  {
+    _deleted_streams.insert(s);
+  }
+
+  void
+  remove(IOContext*ioc)
+    ;
+  
+
+  
+  void
   do_remove(Stream*s)
     ;
   void
@@ -73,15 +87,7 @@ public:
   {
     _added_streams.insert(s);
   }
-  void
-  remove(Stream*s)
-  {
-    _deleted_streams.insert(s);
-  }
-  void
-  remove(IOContext*ioc)
-    ;
-  
+
   void
   poll();
 

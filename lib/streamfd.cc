@@ -24,7 +24,7 @@ StreamFD::desc()const
   std::ostringstream s;
   s << "fd " << fd();
   try {
-    std::string n = getsockname();
+    std::string n = localname();
     s << " " << n;
   } catch (...){
   }
@@ -32,18 +32,18 @@ StreamFD::desc()const
 }
 
 std::string
-StreamFD::getsockname()const
+StreamFD::localname()const
 {
   sockaddr_in sai;
-  getsockname(sai);
+  Stream::getsockname(sai);
   return sockaddr_to_str(sai);
 }
 
 std::string
-StreamFD::getpeername()const
+StreamFD::remotename()const
 {
   sockaddr_in sai;
-  getpeername(sai);
+  Stream::getpeername(sai);
   return sockaddr_to_str(sai);
 }
 

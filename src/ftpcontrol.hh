@@ -9,45 +9,59 @@
 #include <netinet/in.h>
 
 #include <conftree.hh>
-#include <iocontextresponder.hh>
-#include <iocontroller.hh>
 #include <path.hh>
+#include "control.hh"
 #include "user.hh"
-
 
 
 class FTPDataListener;
 class IOContextControlled;
+class StreamContainer;
+class SSLStreamFactory;
 
-class FTPControl : public IOContextResponder,public IOController
+class FTPControl : public Control
 {
-  typedef IOContextResponder super;
-  ConfTree _conf;
+  typedef Control super;
   User _user;
-  bool _authenticated;
 
   FTPDataListener*_data_listener;//for passive mode
   IOContextControlled*_data_xfer;
-
+  Stream*_data_xfer_stream;
+  StreamContainer&_stream_container;
+  SSLStreamFactory*_ssl_factory;
 
   // These values are things cached for the FTP protocol
   std::string _username; // not necessarily the logged in user's username
   Path _path; 
   sockaddr_in _port_addr;
+  sockaddr_in _local_addr;
   off_t _restart_pos;
   Path _rename_from;
   bool _quitting;
+  bool _turning_into_ssl;
+  Stream*_unencrypted_stream;
 
-
+  bool
+  encrypted()const
+  {
+    return _unencrypted_stream;
+  }
+  
   struct ftp_cmd 
   {
-    typedef void (FTPControl::*function_type)(XferTable&xt,const std::string&argument);
+    typedef void (FTPControl::*function_type)(const std::string&argument);
     const char*name;
     function_type function;
     const char*desc;
   };
   static const ftp_cmd ftp_cmd_table[];
   
+  StreamContainer&
+  stream_container()
+  {
+    return _stream_container;
+  }
+
   off_t take_restart_pos()
   {
     off_t tmp = _restart_pos;
@@ -56,8 +70,9 @@ class FTPControl : public IOContextResponder,public IOController
   }
 
   bool
-  restart(int fd)
+  restart(Stream*fd)
     ;
+  
   bool passive()const
   {
     return _data_listener != 0;
@@ -69,34 +84,56 @@ class FTPControl : public IOContextResponder,public IOController
     ;
   
   void
-  command(const std::string&name,const std::string& argument,XferTable&xt)
+  command(const std::string&name,const std::string& argument)
     ;
   
   bool
-  passive_on(XferTable&xt)
+  passive_on(bool epsv=false)
     ;
   bool
-  passive_off(XferTable&xt)
+  passive_off()
+    ;
+  bool
+  active_on()
     ;
 
   void
-  start_xfer(XferTable&xt,IOContextControlled*xfer)
+  start_file_xfer(const Path&path,
+			    XferLimit::Direction::type dir)
     ;
   
+  void
+  start_xfer(IOContextControlled*xfer,
+	     Stream*fd=0)
+    ;
+
+  void
+  free_xfer()
+    ;
   
   void
   lose_auth()
   {
-    _authenticated = false;
+    _user.deauthenticate();
     _username = std::string();
     _restart_pos = 0;
     _rename_from.clear();
     _path.clear();
   }
+
+  void make_response_proto_not_supported()
+  {
+    make_response("522","Network protocol not supported, use (1)");
+  }
+
   
   void
-  make_response(const std::string&code,const std::string&str)
+  make_response(const std::string&code,const std::string&str,char connector=' ')
     ;
+
+  void
+  make_response_multiline(const std::string&code,const std::string&multiline);
+  
 
   void
   make_error(const std::string&str)
@@ -126,7 +163,7 @@ class FTPControl : public IOContextResponder,public IOController
   void
   assert_auth()
   {
-    if(!_authenticated)
+    if(!_user.authenticated())
       throw UnauthenticatedException();
   }
   void
@@ -137,24 +174,18 @@ class FTPControl : public IOContextResponder,public IOController
   }  
 
   void
-  cmd_user(XferTable&xt,const std::string&argument)
+  cmd_user(const std::string&argument)
   {
     _username = argument;
     make_response("331","What's the secret password?");
     
   }
   void
-  cmd_pass(XferTable&xt,const std::string&argument)
-  {
-    if(!login(argument)){
-      make_response("530","You are not everything you claim to be");
-    } else
-      make_response("230","Please come in");
-    
-  }
-
+  cmd_pass(const std::string&argument)
+    ;
+  
   void
-  cmd_stat(XferTable&xt,const std::string&argument)
+  cmd_stat(const std::string&argument)
   {
     assert_auth();
     if(argument.empty()) {
@@ -165,38 +196,38 @@ class FTPControl : public IOContextResponder,public IOController
   }
 
   void
-  cmd_help(XferTable&xt,const std::string&argument)
+  cmd_help(const std::string&argument)
     ;
 
   void
-  cmd_feat(XferTable&xt,const std::string&argument)
+  cmd_feat(const std::string&argument)
     ;
 
   void
-  cmd_mdtm(XferTable&xt,const std::string&argument)
+  cmd_mdtm(const std::string&argument)
     ;
   
   void
-  cmd_size(XferTable&xt,const std::string&argument)
+  cmd_size(const std::string&argument)
     ;
 
   void
-  cmd_mlst(XferTable&xt,const std::string&argument)
+  cmd_mlst(const std::string&argument)
     ;
 
   void
-  cmd_mlsd(XferTable&xt,const std::string&argument)
+  cmd_mlsd(const std::string&argument)
     ;
   
   void
-  cmd_rein(XferTable&xt,const std::string&argument)
+  cmd_rein(const std::string&argument)
   {
     lose_auth();
     make_response("220","Hit me one more time baby");
   }
 
   void
-  cmd_quit(XferTable&xt,const std::string&argument)
+  cmd_quit(const std::string&argument)
   {
     lose_auth();
     make_response("221","Closing control connection");
@@ -206,19 +237,19 @@ class FTPControl : public IOContextResponder,public IOController
   }
 
   void
-  cmd_noop(XferTable&xt,const std::string&argument)
+  cmd_noop(const std::string&argument)
   {
     make_response("200","I did nothing!");
   }
 
   void
-  cmd_syst(XferTable&xt,const std::string&argument)
+  cmd_syst(const std::string&argument)
   {
     make_response("215","UNIX Type: L8");
   }
 
   void
-  cmd_type(XferTable&xt,const std::string&argument)
+  cmd_type(const std::string&argument)
   {
     assert_auth();
     if(argument == "I" || argument == "A")
@@ -230,18 +261,17 @@ class FTPControl : public IOContextResponder,public IOController
   }
 
   void
-  cmd_mode(XferTable&xt,const std::string&argument)
+  cmd_mode(const std::string&argument)
   {
     assert_auth();
     if(argument == "S")
       make_response("200","MODE S is the only one supported");
     else
       make_response("504","Is there any point in implementing this MODE?");
-    
   }
 
   void
-  cmd_stru(XferTable&xt,const std::string&argument)
+  cmd_stru(const std::string&argument)
   {
     assert_auth();
     if(argument == "F")
@@ -252,17 +282,17 @@ class FTPControl : public IOContextResponder,public IOController
   }
 
   void
-  cmd_pasv(XferTable&xt,const std::string&argument)
+  cmd_pasv(const std::string&argument)
   {
     assert_auth();
-    if(!passive_on(xt)){
+    if(!passive_on()){
       make_response("502","Passive mode not available at the moment");
     }
   }
   
 
   void
-  cmd_pwd(XferTable&xt,const std::string&argument)
+  cmd_pwd(const std::string&argument)
   {
     assert_auth();
     make_response("257","\"/" + _path.str() + "\" is current directory.");
@@ -270,29 +300,29 @@ class FTPControl : public IOContextResponder,public IOController
   }
 
   void
-  cmd_abor(XferTable&xt,const std::string&argument)
+  cmd_abor(const std::string&argument)
     ;
 
   void
-  cmd_cdup(XferTable&xt,const std::string&argument)
+  cmd_cdup(const std::string&argument)
   {
     assert_auth();
-    return cmd_cwd(xt,"..");
+    cmd_cwd("..");
   }
 
   void
-  cmd_nlst(XferTable&xt,const std::string&argument)
+  cmd_nlst(const std::string&argument)
   {
-    do_cmd_list(xt,argument,false);
+    do_cmd_list(argument,false);
   }
   void
-  cmd_list(XferTable&xt,const std::string&argument)
+  cmd_list(const std::string&argument)
   {
-    do_cmd_list(xt,argument,true);
+    do_cmd_list(argument,true);
   }
 
   void
-  cmd_rnfr(XferTable&xt,const std::string&argument)
+  cmd_rnfr(const std::string&argument)
   {
     assert_auth();
     _rename_from = _path;
@@ -301,7 +331,7 @@ class FTPControl : public IOContextResponder,public IOController
     
   }
   void
-  cmd_rnto(XferTable&xt,const std::string&argument)
+  cmd_rnto(const std::string&argument)
   {
     assert_auth();
     Path to(_path,argument);
@@ -318,29 +348,42 @@ class FTPControl : public IOContextResponder,public IOController
   }
   
   void
-  cmd_cwd(XferTable&xt,const std::string&argument)
+  cmd_cwd(const std::string&argument)
     ;
   void
-  cmd_dele(XferTable&xt,const std::string&argument)
+  cmd_dele(const std::string&argument)
     ;
   
   void
-  cmd_port(XferTable&xt,const std::string&argument)
+  cmd_epsv(const std::string&argument)
     ;
   void
-  cmd_retr(XferTable&xt,const std::string&argument)
+  cmd_eprt(const std::string&argument)
+    ;
+  void
+  cmd_auth(const std::string&argument)
+    ;
+  void
+  cmd_pbsz(const std::string&argument)
+    ;
+  
+  void
+  cmd_port(const std::string&argument)
+    ;
+  void
+  cmd_retr(const std::string&argument)
     ;
 
   void
-  cmd_stor(XferTable&xt,const std::string&argument)
+  cmd_stor(const std::string&argument)
     ;
 
   void
-  cmd_rest(XferTable&xt,const std::string&argument)
+  cmd_rest(const std::string&argument)
     ;
 
   void
-  cmd_mkd(XferTable&xt,const std::string&argument)
+  cmd_mkd(const std::string&argument)
   {
     assert_auth();
     if(!_user.mkdir(Path(_path,argument)))
@@ -350,7 +393,7 @@ class FTPControl : public IOContextResponder,public IOController
   }
   
   void
-  cmd_rmd(XferTable&xt,const std::string&argument)
+  cmd_rmd(const std::string&argument)
   {
     assert_auth();
     if(!_user.rmdir(Path(_path,argument)))
@@ -360,51 +403,56 @@ class FTPControl : public IOContextResponder,public IOController
   }
   
   void
-  do_cmd_list(XferTable&xt,const std::string&argument,bool detailed)
+  do_cmd_list(const std::string&argument,bool detailed)
     ;
 protected:
 
   void
-  finished_reading(XferTable&xt,char*buf,size_t len)
+  finished_reading(char*buf,size_t len)
     ;
   
   
   void
-  input_line_too_long(XferTable&xt)
+  input_line_too_long()
   {
     make_error("Input line too long for my attention span");
   }
-  
-public:
-  FTPControl(int fd,const ConfTree&conf)
+
+  bool
+  stream_hungup(Stream&stream)
     ;
   
-  bool
-  timedout(XferTable&xt)
+  void
+  timedout(Stream&stream)
   {
     if(!response_ready()){
       make_error("Got bored waiting");
-      return true;
+      return;
     }
-    return IOContextWriter::timedout(xt);
+    return super::timedout(stream);
   }
+protected:
+  void
+  read_in(Stream&stream,size_t max)
+    ;
+public:
+  FTPControl(const ConfTree&conf,StreamContainer&sc,SSLStreamFactory*ssf=0)
+    ;
+
+  void
+  remote_stream(const Stream&stream)
+    ;
   
   
   void
   xfer_done(IOContextControlled*xfer,bool successful);
   ;
   
-  void
-  hangup(class XferTable&xt)
-    ;
-  
   std::string
   desc()const
   {
-    return "ftp control " + super::desc();
+    return "ftp " + super::desc();
   }
-
-  events_t get_events();
   
   ~FTPControl()
     ;

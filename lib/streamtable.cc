@@ -8,10 +8,14 @@
 #include "streamfd.hh"
 #include "iocontext.hh"
 
+#define debug(x) warnx(x)
+#undef debug
+#define debug(x) do {}while(0)
+
 void
 StreamTable::remove(IOContext*ioc)
 {
-  warnx("removing iocontext %p: %s",ioc, ioc->desc().c_str());
+  debug(("removing iocontext %p: %s",ioc, ioc->desc().c_str()));
   for(_streams_type::iterator i = _streams.begin();i!=_streams.end();++i){
     if(!(*i)->consumer() || (*i)->consumer()==ioc)
       remove(*i);
@@ -40,7 +44,7 @@ StreamTable::free()  {
 void
 StreamTable::do_add(Stream*s)
 {
-  warnx("adding stream %p: %s",s,s->desc().c_str());
+  debug(("adding stream %p: %s",s,s->desc().c_str()));
   _streams.push_back(s);
   StreamFD*sfd = dynamic_cast<StreamFD*>(s);
   if(sfd){
@@ -54,7 +58,7 @@ StreamTable::do_add(Stream*s)
 void
 StreamTable::do_remove(Stream*s)
 {
-  warnx("removing stream %p: %s",s,s->desc().c_str());
+  debug(("removing stream %p: %s",s,s->desc().c_str()));
   _streams.remove(s);
   StreamFD*sfd = dynamic_cast<StreamFD*>(s);
   if(sfd){
@@ -71,7 +75,7 @@ bool
 StreamTable::do_events(Stream*s)
 {
   bool wantmore = false;
-  warnx("polling %s:%s",s->desc().c_str(),s->consumer()?s->consumer()->desc().c_str():"<nul>");
+  debug(("polling %s:%s",s->desc().c_str(),s->consumer()?s->consumer()->desc().c_str():"<nul>"));
   try{
     if(s->consumer()){
       s->consumer()->read(*s);
@@ -91,6 +95,9 @@ StreamTable::do_events(Stream*s)
   } catch (IOContext::Destroy&d){
     remove(d.target());
     wantmore = false;
+  }catch(const Stream::ClosedException&e){
+    remove(s);
+    wantmore = false;
   } catch (const std::exception&e){
     warnx("closing %s:%s due to %s",s->desc().c_str(),s->consumer()?s->consumer()->desc().c_str():"<nul>",e.what());
     remove(s);
@@ -105,16 +112,17 @@ StreamTable::poll()
 {
   struct pollfd *fds = 0;
   unsigned fds_size = 0;
-  /*
+  if(0){
     // The simplest possible event loop
     
-  while(!empty()){
-    sow_and_reap();
-    for(_streams_type::iterator i = _streams.begin();i!=_streams.end();++i)
-      do_events(*i);
-    sleep(1);
+    while(!empty()){
+      sow_and_reap();
+      for(_streams_type::iterator i = _streams.begin();i!=_streams.end();++i)
+	do_events(*i);
+      sleep(1);
+    }
   }
-  /**/
+  
   
   try{
     while(!empty()){

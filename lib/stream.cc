@@ -55,7 +55,7 @@ Stream::listen_ipv4_range(uint32_t inaddr,uint16_t port_min,uint16_t port_max)
   sockaddr_in name;
   memset(&name,0,sizeof name); // for NetBSD 1.6
   name.sin_family = AF_INET;
-  //  name.sin_addr.s_addr = in_addr;
+  name.sin_addr.s_addr = inaddr;
   
   for(;tries >= 0;--tries){
     name.sin_port = htons(port);

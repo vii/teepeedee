@@ -1,6 +1,7 @@
 #ifndef _TEEPEEDEE_LIB_STREAM_HH
 #define _TEEPEEDEE_LIB_STREAM_HH
 
+#include <exception>
 #include <string>
 
 #include <sys/types.h>
@@ -21,6 +22,37 @@ class Stream
   
 public:
 
+  class Exception:public std::exception
+  {public:
+    ~Exception()throw()
+    {
+    }
+  };
+  
+  class ClosedException:public Exception
+  {
+  public:
+    const char*what()const throw()
+    {
+      return "attempt to do IO on a closed stream";
+    }
+    ~ClosedException()throw()
+    {
+    }
+  };
+  class UnsupportedException:public Exception
+  {
+  public:
+    const char*what()const throw()
+    {
+      return "attempt to perform an unsupported operation on a stream";
+    }
+    ~UnsupportedException()throw()
+    {
+    }
+  };
+  
+  
   // Bind and listen to a socket
   // Try to find a port randomly in the range [PORT_MIN,PORT_MAX]
   // inclusive
@@ -109,6 +141,39 @@ public:
   remotename()const
   {
     return "remoteend";
+  }
+  void
+  getsockname(struct sockaddr_in&sai)const
+  {
+    socklen_t len = sizeof sai;
+    memset(&sai,0,sizeof sai);
+    getsockname(&sai,&len);
+  }
+  void
+  getpeername(struct sockaddr_in&sai)const
+  {
+    socklen_t len = sizeof sai;
+    memset(&sai,0,sizeof sai);
+    getpeername(&sai,&len);
+  }
+  
+  virtual
+  void
+  getsockname(void*addr,socklen_t*len)const
+  {
+    throw UnsupportedException();
+  }
+  virtual
+  void
+  getpeername(void*addr,socklen_t*len)const
+  {
+    throw UnsupportedException();
+  }
+  virtual
+  void
+  seek_from_start(off_t pos)
+  {
+    throw UnsupportedException();
   }
 
   virtual

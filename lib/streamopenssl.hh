@@ -20,8 +20,7 @@ class StreamOpenSSL :public  Stream
   {
     return _source->waiting(ret);
   }
-  
-  
+
 public:
   StreamOpenSSL(IOContextOpenSSL&fol):_source(&fol)
   {
@@ -43,7 +42,7 @@ public:
     if(ret <0) {
       if(waiting(ret)){
 	if(_source->hungup())
-	  return 0;
+	  throw ClosedException();
 	return -1;
       }
       throw OpenSSLException("SSL_read");
@@ -56,13 +55,14 @@ public:
   write(const char*buffer,size_t size)
   {
     int ret;
+    if(_source->hungup())
+      throw ClosedException();
+    
     if(_source->ssl_write_buffer_too_big())
       return -1;
     ret = SSL_write(ssl(),buffer,size);
     if(ret <0) {
       if(waiting(ret)){
-	if(_source->hungup())
-	  return 0;
 	return -1;
       }
       throw OpenSSLException("SSL_write");

@@ -89,15 +89,21 @@ public:
 
   bool want_write(Stream&stream)
   {
-    if(!stream_out())stream_out(&stream);
-    if(stream_in()==&stream)return false;
-    return true;
+    if(!stream_out()){
+      if(stream_in()!=&stream)
+	stream_out(&stream);
+    }
+    return &stream==stream_out();
   }
   bool want_read(Stream&stream)
   {
-    if(!stream_in())stream_in(&stream);
-    if(stream_out()==&stream)return false;
-
+    if(!stream_in()){
+      if(stream_out()!=&stream)
+	stream_in(&stream);
+    }
+    if(&stream!=stream_out())
+      return false;
+    
     if(data_buffered())return false;
     return true;
   }
@@ -106,16 +112,20 @@ protected:
   void
   read_in(Stream&stream,size_t max)
   {
-    if(stream_out()==&stream)return;
+    if(!stream_in()){
+      if(stream_out()!=&stream)
+	stream_in(&stream);
+    }
     do_io(stream);
   }
 
   void
   write_out(Stream&stream,size_t max)
   {
-    if(stream_in()==&stream)return;
-    if(!stream_out())stream_out(&stream);
-
+    if(!stream_out()){
+      if(stream_in()!=&stream)
+	stream_out(&stream);
+    }
     do_io(stream);
   }
 };
