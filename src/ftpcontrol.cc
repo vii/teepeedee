@@ -278,15 +278,26 @@ FTPControl::cmd_port(XferTable&xt,const std::string&argument)
 
 void
 FTPControl::do_cmd_list(XferTable&xt,const std::string&argument,bool detailed)
-{
+{ // Messy hack central. None of this is spec'd in the RFC 959 but clients expect it
   assert_auth();
   assert_no_xfer();
+  std::string arg = argument;
 
   FileLister*fl;
-  if(argument.find_first_of("*?")!=std::string::npos)
-    fl = new FileListerGlob(argument,_user.list(Path(_path)));
+  if(!argument.empty() && argument[0] == '-') {
+    std::string::size_type s = argument.find(' ');
+    // ignore -options from stupid clients [like glftp] who try to
+    // send us flags to ls(1)
+    if(s != std::string::npos)
+      arg = argument.substr(s+1);
+    else
+      arg = std::string();
+  }
+  
+  if(arg.find_first_of("*?")!=std::string::npos)
+    fl = new FileListerGlob(arg,_user.list(Path(_path)));
   else
-    fl = _user.list(Path(_path,argument));
+    fl = _user.list(Path(_path,arg));
 
   IOContextControlled*fdl;
   try{
