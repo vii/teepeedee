@@ -1,0 +1,20 @@
+* http name based virtual hosts
+* test harder
+* safely bind to privileged ports
+
+* document options
+* smp optimization
+* generally make more http spec compliant
+* http content-range resume
+* maybe add realpath checking
+* do something about brute force password attacks
+* add rate limiting
+* add connect dos checking
+* do better authentication mechanisms
+* gracefully have maximum connection limits
+* catch out of memory conditions
+* reduce the number of stat syscalls
+* split up XferTable::do_poll into smaller functions
+* IPv6
+* implement ftp STAT properly
+* implement ftp OPTS

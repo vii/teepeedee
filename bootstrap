@@ -1,0 +1,8 @@
+#! /bin/sh
+
+aclocal 
+autoheader 
+automake --gnu --add-missing --copy
+autoconf 
+CFLAGS="$CFLAGS -ggdb3 -Wall" CXXFLAGS="$CXXFLAGS -ggdb3 -Wall" ./configure $@
+

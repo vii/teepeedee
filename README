@@ -1,0 +1,64 @@
+Description
+====
+
+teepeedee is a small, hopefully scalable, single-threaded file
+server. It can serve multiple files over http and ftp simultaneously,
+listening on any number of ports. It uses sendfile and is written in
+C++.
+
+teepeedee certainly runs on FreeBSD i586 4.7-STABLE, Linux i686 2.4.20
+with glibc 2.3, Debian i686 Woody (20021220), Debian PPC Unstable
+(20021220).
+
+It is a very untested at the moment and does not have any DoS
+protection at all. Please report problems to the author, John Fremlin
+<john@fremlin.de>!
+
+
+WARNING
+==
+
+Do not run with elevated privileges! While hypothetically there should
+be no problems with running teepeedee as root, you would have to be
+more nuts than raisins to do it.
+
+teepeedee does not check for symlinks. It is important that
+directories under users' home directories not be writable by untrusted
+agents as otherwise users could symlinkrace teepeedee and e.g. get it
+to overwrite any file owned by the teepeedee running user.
+
+
+Security
+==
+
+UPLOADED FILES ARE CREATED GROUP WRITABLE!
+
+teepeedee will only allow files or directories to be read that are
+world readable, and will only allow files or directories to be
+modified if they are owned by the teepeedee process's user and group,
+and are user and group writable. A file or directory's parents ARE NOT
+CHECKED FOR ACCESS PERMISSIONS.
+
+
+Configuration
+==
+
+By default teepeedee takes /etc/teepeedee as its configuration
+root. You can change this with ./configure --enable-configdir=dir. If
+present the first command line argument given to teepeedee overrides
+the configuration root.
+
+Under the configuration root, there should be a number of lowercase
+directories named after protocols, e.g. "ftp" or "http". Inside them should
+be directories defining servers.
+
+For an example, untar "example-config.tar" in the distribution and
+look at how it uses symlinks to share user information between the
+HTTP and FTP servers.  If you want to start from that configuration,
+note the bind_addr files contain "127.0.0.1" (=localhost) so that the
+servers will only be accessible from same computer they're running on;
+to change that either delete the bind_addr files or change the IP
+address in them.
+
+There are lots and lots of undocumented options and no documented ones
+:-(

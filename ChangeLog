@@ -1,0 +1,23 @@
+2002-12-20  John Fremlin  <john@fremlin.de>
+
+	* lib/iocontextxfer.cc (hangup): fixed problem where buffered data
+	would not be written out due to data connection hanging up
+
+	* src/httpcontrol.cc (persistant): fixed order of tests
+
+	* lib/iocontext.cc (getpeername): added
+
+	* lib/iocontextresponder.cc (read_done): added logging
+
+	* src/ftpcontrol.cc: made cmd_help tell more
+	(do_cmd_list): add globbing
+
+	* lib/filelisterglob.hh: added
+
+2002-12-19  John Fremlin  <john@fremlin.de>
+
+	* lib/sendfile.cc: Fixed filedescriptor leak
+
+	* src/ftpcontrol.cc (FTPControl): Fixed lack of braces round PASV
+	mode port string - doh!
+

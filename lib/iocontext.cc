@@ -1,0 +1,181 @@
+#include <sstream>
+
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/poll.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+
+#include "xfertable.hh"
+#include "iocontext.hh"
+#include "unixexception.hh"
+
+std::string
+IOContext::desc()const
+{
+    std::ostringstream s;
+    s << "fd " << get_fd();
+    try {
+      std::string n = getsockname();
+      s << " " << n;
+    } catch (...){
+    }
+    return s.str();
+}
+
+void
+IOContext::close()
+{
+  if(_fd == -1)
+    return;
+
+  //  shutdown(_fd,2);
+  ::close(_fd);
+  _fd = -1;
+}
+
+void
+IOContext::become_ipv4_socket()
+{
+  if(get_fd() != -1)
+    close();
+  
+  set_fd(socket (PF_INET, SOCK_STREAM, 0));
+  if(get_fd() == -1)
+    throw UnixException("socket(PF_INET, SOCK_STREAM, 0)");
+}
+
+
+void
+IOContext::bind_ipv4(uint32_t in_addr,uint16_t port)
+{
+  if(get_fd() == -1)
+    become_ipv4_socket();
+
+  set_nonblock();
+  
+  struct sockaddr_in name;
+  name.sin_family = AF_INET;
+  name.sin_port = port;
+  name.sin_addr.s_addr = in_addr;
+
+  if(::bind(get_fd(),(struct sockaddr*)&name,sizeof name)){
+    UnixException ue("bind");
+    throw ue;
+  }
+}
+
+
+void
+IOContext::bind_ipv4(uint32_t in_addr,uint16_t port_min,uint16_t port_max)
+{
+  int tries = port_max - port_min + 1;
+  int port = (std::rand() % tries) + port_min;
+  
+  for(;tries >= 0;--tries){
+    try{
+      bind_ipv4(in_addr,htons(port));
+      return;
+    }
+    catch(UnixException&ue){
+      if(ue.get_errno() != EADDRINUSE || port == port_max)
+	throw;
+    }
+
+    port ++;
+    if(port > port_max)
+      port = port_min;
+  }
+}
+
+
+void
+IOContext::discard_hangup(class XferTable&xt)
+{
+  shutdown(get_fd(),2);
+  hangup(xt);
+}
+
+void
+IOContext::hangup(class XferTable&xt)
+{
+  xt.del(this);
+  delete this;
+}
+
+void
+IOContext::set_nonblock(int fd)
+{
+  int flags = fcntl(fd,F_GETFL,0);
+  if(flags==-1)
+    throw UnixException("fcntl(F_GETFL)");
+  flags |= O_NONBLOCK;
+  if(fcntl(fd,F_SETFL,flags)==-1)
+    throw UnixException("fcntl(F_SETFL)");
+}
+
+void
+IOContext::set_bind_reuseaddr(bool on)
+{
+  int val = on ? 1 : 0;
+  if(setsockopt(get_fd(), SOL_SOCKET, SO_REUSEADDR, &val,sizeof val))
+    throw UnixException("setsockopt(fd,SOL_SOCKET, SO_REUSEADDR,...)");
+}
+
+static
+std::string
+sockaddr_to_str(const sockaddr_in&sai)
+{
+  std::ostringstream s;
+  char buf[50];
+  inet_ntop (AF_INET, &sai.sin_addr.s_addr, buf,sizeof buf);
+  s << buf << ':' << ntohs(sai.sin_port) << '\0';
+  
+  return s.str();
+}
+
+
+void
+IOContext::getsockname(struct sockaddr_in&sai)const
+{
+  socklen_t len = sizeof sai;
+  getsockname(&sai,&len);
+}
+
+void
+IOContext::getsockname(void*addr,socklen_t*len)const
+{
+  if(::getsockname(get_fd(),(sockaddr*)addr,len))
+    throw UnixException("getsockname on FTP control socket");
+}
+
+std::string
+IOContext::getsockname()const
+{
+  sockaddr_in sai;
+  getsockname(sai);
+  return sockaddr_to_str(sai);
+}
+
+void
+IOContext::getpeername(struct sockaddr_in&sai)const
+{
+  socklen_t len = sizeof sai;
+  getpeername(&sai,&len);
+}
+
+void
+IOContext::getpeername(void*addr,socklen_t*len)const
+{
+  if(::getpeername(get_fd(),(sockaddr*)addr,len))
+    throw UnixException("getpeername on FTP control socket");
+}
+
+std::string
+IOContext::getpeername()const
+{
+  sockaddr_in sai;
+  getpeername(sai);
+  return sockaddr_to_str(sai);
+}
