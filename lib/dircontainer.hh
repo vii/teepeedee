@@ -46,28 +46,7 @@ public:
 
     void
     read_next()
-    {
-      if(!_stream)
-	return;
-
-      struct dirent*e;
-      if(readdir_r(_stream,&_entry,&e)){
-	warn("readdir_r");
-	close();
-	return;
-      }
-      if(!e){
-	close();
-	return;
-      }
-      if(e!=&_entry)
-	memcpy(&_entry,e,sizeof _entry);
-      
-      if(_entry.d_name[0] == '.' && (!_entry.d_name[1]
-	 || (_entry.d_name[1] == '.' && !_entry.d_name[2])))
-	read_next();
-      _entry.d_name[sizeof(_entry.d_name)-1]=0;
-    }
+      ;
 
   public:
 

@@ -7,9 +7,7 @@ class IOContextWriter : public virtual IOContext
 {
   const char* _buf;
   unsigned _buf_len;
-  unsigned _buf_pos;
-
-  
+  unsigned _buf_pos;  
 protected:
   bool
   write_buf_empty()const
@@ -18,7 +16,7 @@ protected:
   }
   virtual
   void
-  finished_writing(class XferTable&xt)
+  finished_writing()
   {
   }
 
@@ -32,16 +30,30 @@ protected:
     _buf = buf;
     _buf_len = len;
   }
+
+  bool
+  want_write(Stream&stream)
+  {
+    if(write_buf_empty()){
+      finished_writing();
+    }
+    return !write_buf_empty();
+  }
+  bool
+  want_read(Stream&stream)
+  {
+    return false;
+  }
+protected:
+  void // return true if want to write more
+  write_out(Stream&stream,size_t max)
+    ;
+  
 public:
   IOContextWriter():_buf(0),_buf_len(0),_buf_pos(0)
   {
   }
 
-  events_t get_events()
-    ;
-  
-  bool io(const struct pollfd&pfd,class XferTable&xt)
-    ;
 };
 
 #endif

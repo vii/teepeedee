@@ -10,8 +10,10 @@
 
 class IOContextResponder : public IOContextWriter 
 {
+  typedef IOContextWriter super;
+  
   std::string _response;
-  char _buf[400];
+  char _buf[2000];
   unsigned _buf_write_pos;
   bool _closing;
 
@@ -19,9 +21,6 @@ class IOContextResponder : public IOContextWriter
   report_connect()
     ;
   
-  bool
-  read_in(XferTable&xt)
-    ;
 
   void
   prepare_io()
@@ -32,7 +31,20 @@ class IOContextResponder : public IOContextWriter
     _buf_write_pos = 0;
   }
   
+  void
+  input_line_too_long()
+  {
+    delete_this();
+  }
+
 protected:
+  void
+  read_in(Stream&stream,size_t max)
+    ;
+  void
+  write_out(Stream&stream,size_t max)
+    ;
+
   void
   close_after_output()
   {
@@ -49,25 +61,18 @@ protected:
     return !_response.empty();
   }
   void
-  finished_writing(XferTable&xt)
+  finished_writing()
     ;
 
   void
-  read_done(XferTable&xt)
+  read_done(Stream&stream)
     ;
   
   virtual
   void
-  finished_reading(XferTable&xt,char*buf,size_t len)
+  finished_reading(char*buf,size_t len)
     =0;
   
-  virtual
-  void
-  input_line_too_long(XferTable&xt)
-  {
-    hangup(xt);
-  }
-
   void
   add_response(const std::string&resp)
   {
@@ -78,22 +83,23 @@ protected:
       prepare_io();
   }
 public:
-  IOContextResponder(int fd=-1):
+  IOContextResponder():
     _buf_write_pos(0),
     _closing(false)
   {
-    if(fd != -1) {
-      set_fd(fd);
-      report_connect();
-    }
   }
-  
-  
   bool
-  io(const struct pollfd&pfd,class XferTable&xt)
-    ;
-
-  events_t get_events();
+  want_write(Stream&stream)
+  {
+    return response_ready() || closing();
+  }
+  bool
+  want_read(Stream&stream)
+  {
+    if(!response_ready())
+      return true;
+    return false;
+  }
   
 };
 #endif

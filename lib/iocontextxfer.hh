@@ -1,58 +1,123 @@
 #ifndef _TEEPEEDEE_LIB_IOCONTEXTXFER_HH
 #define _TEEPEEDEE_LIB_IOCONTEXTXFER_HH
 
+#include "unixexception.hh"
 #include "iocontextcontrolled.hh"
+#include "xferlimit.hh"
 #include "sendfile.hh"
 
-class IOContextXfer : public IOContextControlled,
-		      public Sendfile
+class IOContextXfer : public IOContextControlled,public Sendfile
 {
+  typedef IOContextControlled super;
+  
+  XferLimit* _limit;
+
   void
-  do_hangup(XferTable&xt)
-    ;
+  free()
+  {
+    if(_limit){
+      delete _limit;
+      _limit=0;
+    }
+  }
+
+  void
+  do_io(Stream&stream)
+  {
+    if(!stream_in() && data_buffered()){
+      Sendfile::write_out();
+      if(!data_buffered()){
+	completed();
+	return;
+      }
+      return;
+    }
+    if(!stream_in()||!stream_out())
+      return;
+    bool result = Sendfile::io(_limit);
+    if(result){
+      completed();
+      return;
+    }
+  }
   
 public:
-  IOContextXfer(IOController*ioc,int wfd=-1, int rfd=-1):IOContextControlled(ioc),
-						   Sendfile(wfd,rfd)
+  IOContextXfer(IOController*ioc,Stream*in=0,Stream*out=0):
+    IOContextControlled(ioc),
+    Sendfile(in,out),
+    _limit(0)
   {
   }
 
-  
-  // this magic for ftp control connections
-  // and for http persistant connections
   void
-  set_fd(int fd)
+  limit(XferLimit*xl)
   {
-    if(get_read_fd() == get_fd())
-      set_read_fd(fd);
-    if(get_write_fd() == get_fd())
-      set_write_fd(fd);
-    IOContextControlled::set_fd(fd);
+    _limit = xl;
   }
 
-  void
-  hangup(XferTable&xt)
-    ;
+  bool
+  stream_hungup(Stream&stream)
+  {
+    if(&stream==stream_out()){
+      stream_out(0);
+      if(stream_in() && stream_in()->consumer() == this)
+	stream_in()->release_consumer();
+      return true;
+    }
+    if(&stream==stream_in()){
+      stream_in(0);
+      if(data_buffered()){
+	return false;
+      }
+      if(stream_out() && stream_out()->consumer() == this)
+	stream_out()->release_consumer();
+      return true;
+    }
+    return false;
+  }
 
   std::string
   desc()const
   {
-    return "sendfile " + IOContextControlled::desc();
+    return "sendfile " + super::desc();
   }
-  
-  events_t
-  get_events()
-    ;
-  bool
-  io(const struct pollfd&pfd,XferTable&xt)
-    ;
   
   ~IOContextXfer()
   {
-    IOContextControlled::set_fd(-1); // stop it being closed twice
+    free();
   }
 
-};
+  bool want_write(Stream&stream)
+  {
+    if(!stream_out())stream_out(&stream);
+    if(stream_in()==&stream)return false;
+    return true;
+  }
+  bool want_read(Stream&stream)
+  {
+    if(!stream_in())stream_in(&stream);
+    if(stream_out()==&stream)return false;
 
+    if(data_buffered())return false;
+    return true;
+  }
+
+protected:
+  void
+  read_in(Stream&stream,size_t max)
+  {
+    if(stream_out()==&stream)return;
+    do_io(stream);
+  }
+
+  void
+  write_out(Stream&stream,size_t max)
+  {
+    if(stream_in()==&stream)return;
+    if(!stream_out())stream_out(&stream);
+
+    do_io(stream);
+  }
+};
 
 #endif

@@ -3,101 +3,47 @@
 
 #include <string>
 #include <ctime>
-
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 
-class XferTable;
+#include "stream.hh"
 
+// An IOContext is a consumer of IO from a stream
 
 class IOContext
 {
-  int _fd;
   std::time_t _max_idle;
   std::time_t _timeout_time;
-  
-public:
 
-  typedef int events_t;
-
-  IOContext():_fd(-1),_max_idle(0),_timeout_time(0)
+  IOContext(const IOContext&)
   {
   }
-
-  virtual
-  bool
-  timedout(XferTable&xt)
+  void reset_timeout(std::time_t now)
   {
-    hangup(xt);
-    return true;
+    set_timeout(now + _max_idle);
   }
-  
-  virtual
-  events_t get_events()
-    =0;
-
-  // returns true if the situation wrt to the XferTable has changed
-  virtual
-  bool
-  io(const struct pollfd&pfd,XferTable&xt)
-    =0;
-
-  // Dangerous! should delete THIS!
-  virtual
-  void
-  hangup(XferTable&xt)
-    ;
-  
-  virtual
-  std::string
-  desc()const
-    ;
-  
+		     
   void
   set_timeout(std::time_t when)
   {
     _timeout_time = when;
   }
-  void
-  set_timeout_interval(std::time_t i)
-  {
-    _max_idle = i;
-    _timeout_time = 0;
-  }
-
   bool
   has_timeout()const
   {
     return _max_idle;
   }
   
-  void
-  reset_timeout(std::time_t now)
-  {
-    if(!has_timeout())
-      return;
-    set_timeout(now + _max_idle);
-  }
-
   std::time_t
   get_timeout()const
   {
     return _timeout_time;
   }
-  
   bool
-  active()const
-  {
-    return get_fd() != -1;
-  }
-  
-
-  bool
-  check_timeout(std::time_t now,XferTable&xt)
+  check_timeout(Stream&stream)
   {
     if(!has_timeout())return false;
     std::time_t limit = get_timeout();
+    std::time_t now = std::time(0);
     
     if(!limit){
       reset_timeout(now);
@@ -105,107 +51,152 @@ public:
     }
     if(now > limit){
       reset_timeout(now);
-      return timedout(xt);
+      timedout(stream);
+      return true;
     }
-
     return false;
   }
-  
-  bool
-  io_events(const struct pollfd&pfd,std::time_t now,XferTable&xt)
-  {
-    reset_timeout(now);
-    return io(pfd,xt);
-  }
-
-
-  // Dangerous! calls hangup
+protected:  
   void
-  discard_hangup(XferTable&xt)
-    ;
-  
-  virtual ~IOContext()
+  made_progress()
   {
-    close();
+    reset_timeout(std::time(0));
   }
 
-  int get_fd()const
+  ssize_t
+  do_read(Stream&stream,char*buffer,size_t size)
   {
-    return _fd;
+    ssize_t ret = stream.read(buffer,size);
+    if(ret != -1)
+      made_progress();
+    return ret;
   }
 
-  // must not call close()!
+  ssize_t
+  do_write(Stream&stream,const char*buffer,size_t size)
+  {
+    ssize_t ret = stream.write(buffer,size);
+    if(ret != -1)
+      made_progress();
+    return ret;
+  }
+
+  Stream*
+  do_accept(Stream&stream)
+  {
+    Stream* s = stream.accept();
+    if(s)
+      made_progress();
+    return s;
+  }
+
+  virtual
+  void // return true if want to read more
+  read_in(Stream&stream,size_t max)
+  {
+  }
+
+  virtual
+  void // return true if want to write more
+  write_out(Stream&stream,size_t max)
+  {
+  }
+
   virtual
   void
-  set_fd(int fd)
+  timedout(Stream&stream)
   {
-    _fd = fd;
+    hangup(stream);
+  }
+
+  void hangup(Stream&stream)
+  {
+    if(stream_hungup(stream))
+      delete_this();
+    else
+      if(stream.consumer()==this)
+	stream.release_consumer();
+  }
+
+
+public:
+  class Destroy
+  {
+    IOContext*_target;
+  public:
+    Destroy(IOContext*ioc):_target(ioc)
+    {
+    }
+    IOContext*
+    target()
+    {
+      return _target;
+    }
+  };
+protected:
+  void
+  delete_this()
+  {
+    throw Destroy(this);
+  }
+public:
+  IOContext():_max_idle(0),_timeout_time(0)
+  {
+  }
+  
+  void
+  read(Stream&stream,size_t max=0)
+  {
+    read_in(stream,max);
+  }
+  
+  void
+  write(Stream&stream,size_t max=0)
+  {
+    write_out(stream,max);
+    check_timeout(stream);
+  }
+  
+  // can't make these const as e.g. iocontextwriter needs to do a bunch of stuff
+  virtual
+  bool
+  want_write(Stream&stream)
+    =0;
+  
+  virtual
+  bool
+  want_read(Stream&stream)
+    =0;
+
+  // Notifies IOContext that this related Stream is dead
+  // true means that the STREAM was essential to the IOContext and the
+  // IOContext sees no further purpose in life in light of the fact
+  // that the Stream has died
+  virtual
+  bool
+  stream_hungup(Stream&stream)
+  {
+    return true;
+  }
+  
+  virtual
+  std::string
+  desc()const
+  {
+    return "consumer";
   }
 
   void
-  close();
-
-  void
-  become_ipv4_socket()
-    ;
-  
-  // in_addr and port are in network byte order
-  void
-  bind_ipv4(uint32_t in_addr,uint16_t port)
-    ;
-
-  // now in_addr is in network byte order
-  // but port_min and port_max are in HOST BYTE ORDER
-  void
-  bind_ipv4(uint32_t inaddr,uint16_t port_min,uint16_t port_max);
-
-  
-  //may throw UnixException
-  void
-  set_nonblock()
+  set_timeout_interval(std::time_t i)
   {
-    set_nonblock(get_fd());
+    _max_idle = i;
+    _timeout_time = 0;
   }
 
-  void
-  setsockopt(int LEVEL, int OPTNAME, void
-	     *OPTVAL, socklen_t OPTLEN)
-    ;
-  
-  void
-  set_reuse_addr(bool on=true)
-    ;
-  
-  static
-  void
-  set_nonblock(int fd)
-    ;
-
-  void
-  getsockname(struct sockaddr_in&sai)const
-    ;
-  
-  void
-  getsockname(void*addr,socklen_t*len)const
-    ;
-
-  std::string
-  getsockname()const
-    ;
-
-  void
-  getpeername(struct sockaddr_in&sai)const
-    ;
-  
-  void
-  getpeername(void*addr,socklen_t*len)const
-    ;
-
-  std::string
-  getpeername()const
-    ;
-
-  
+		     
+  virtual ~IOContext()
+  {
+  }
 };
 
 

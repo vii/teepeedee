@@ -4,9 +4,17 @@
 
 #include "unixexception.hh"
 #include "sendfile.hh"
+#include "xferlimit.hh"
+#include "streamfd.hh"
 
-#include "config.h"
-
+#ifndef HAVE_SENDFILE
+static
+ssize_t
+system_sendfile(int wfd, int rfd)
+{
+  return -1;
+}
+#else
 #ifdef HAVE_SYS_SENDFILE_H
 
 // This works on Linux at least
@@ -19,7 +27,7 @@ system_sendfile(int wfd, int rfd)
   // XXX check up: suppose it returns 0 but in fact has something left to read?
   ssize_t ret = sendfile(wfd,rfd,0,(unsigned)-1);  
 
-  if(ret == -1 && errno != EINVAL)
+  if(ret == -1 && errno != EINVAL && errno != ENOSYS)
     throw UnixException("sendfile");
   
   return ret;
@@ -49,7 +57,7 @@ system_sendfile(int wfd, int rfd)
     if(errno == EAGAIN) {
       if(lseek(rfd,written,SEEK_CUR) == -1)
 	throw UnixException("lseek after sendfile");
-      return 1;
+      return written;
     }
     if(errno != EINVAL && errno != ENOTSOCK)
       throw UnixException("sendfile");
@@ -64,72 +72,70 @@ system_sendfile(int wfd, int rfd)
 
 #endif
 #endif
+#endif
 
 bool
-Sendfile::io()
+Sendfile::io(XferLimit*limit)
 {
-  ssize_t ret;
-
-  if(!_buf){
-    ret = system_sendfile(_write_fd,_read_fd);
-    if(ret == 0)
-      return true;
-    if(ret != -1)
-      return false;
-
+  if(!_buf) {
+    StreamFD*in,*out;
+    if((in=dynamic_cast<StreamFD*>(_in))&&(out=dynamic_cast<StreamFD*>(_out))){
+      ssize_t ret;
+      ret = system_sendfile(out->fd(),in->fd());
+      if(ret == 0)
+	return true;
+      if(ret != -1){
+	if(limit)limit->xfer(ret);
+	return false;
+      }
+    
+    }
     _buf = new Buf;
   }
 
   if(data_buffered()){
-  redo_write:
-    ret = write(_write_fd,_buf->buffer + _buf->pos,_buf->len - _buf->pos);
-    if(ret == -1){
-      if(errno == EINTR)
-	goto redo_write;
-
-      if(errno == EAGAIN){
-	return false;
-      }
-      throw UnixException("write");
-    }
-    _buf->pos += ret;
-    return false;
-  }
-
- redo_read:
-  ret  = read(_read_fd,_buf->buffer,sizeof _buf->buffer);
-  if(ret == 0)
-    return true;
-  if(ret == -1){
-    if(errno == EAGAIN)
+    write_out();
+    if(data_buffered())
       return false;
-    if(errno == EINTR)
-      goto redo_read;
-
-    throw UnixException("read");
   }
-  _buf->len = ret;
-  _buf->pos = 0;
-  return false;
+
+  bool ret = read_in();
+  if(limit)limit->xfer(_buf->len);
+  
+  if(data_buffered())
+    write_out();
+  
+  return ret && !data_buffered();
 }
 
 void
-Sendfile::close()
+Sendfile::write_out()
 {
-  if(_read_fd != -1) {
-    if(::close(_read_fd))
-      warn("close on sendfile read filedescriptor");
-
-    _read_fd = -1;
-  }
-  if(_write_fd != -1) {
-    if(::close(_write_fd))
-      warn("close on sendfile write filedescriptor");
-      
-    _write_fd = -1;
-  }
-  if(_buf){
-    delete _buf;
-    _buf = 0;
+  ssize_t ret;
+  for(;;){
+    ret = _out->write(_buf->buffer + _buf->pos,_buf->len - _buf->pos);
+    if(ret == -1)
+      return;
+    _buf->pos += ret;
+    return;
   }
 }
+
+
+bool
+Sendfile::read_in()
+{
+  ssize_t ret;
+  _buf->pos = 0;
+  _buf->len = 0;
+  for(;;){
+    ret  = _in->read(_buf->buffer,sizeof _buf->buffer);
+    if(ret == 0)
+      return true;
+    if(ret == -1)
+      return false;
+    _buf->len = ret;
+    return false;
+  }
+}
+

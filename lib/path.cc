@@ -21,7 +21,7 @@ Path::append(const std::string&name)
 void
 Path::append_one(const std::string&name)
 {
-  if(name.empty() || name.c_str() == ".")
+  if(name.empty() || name == ".")
     return;
   if(name == ".."){
     if(!empty())pop_back();

@@ -1,14 +1,29 @@
 #ifndef _TEEPEEDEE_LIB_SENDFILE_HH
 #define _TEEPEEDEE_LIB_SENDFILE_HH
 
+#include "stream.hh"
+class XferLimit;
+
 class Sendfile 
 {
-  int _read_fd;
-  int _write_fd;
+  Stream*_in;
+  Stream*_out;
 
+  bool
+  read_in();
+
+  void
+  free()
+  {
+    if(_buf){
+      delete _buf;
+      _buf = 0;
+    }
+  }
+  
   struct Buf
   {
-    char buffer[8192];
+    char buffer[1<<16];
     unsigned len;
     unsigned pos;
 
@@ -17,36 +32,39 @@ class Sendfile
     }
   };
   Buf*_buf;
+
+  Sendfile(const Sendfile&)
+  {
+  }
+  
 public:
-  Sendfile(int wfd=-1,int rfd=-1):
-    _read_fd(rfd),
-    _write_fd(wfd),
+  Sendfile(Stream*in,Stream*out):
+    _in(in),_out(out),
     _buf(0)
   {
   }
 
-  void
-  set_read_fd(int rfd)
+  Stream*
+  stream_in()
   {
-    _read_fd =rfd;
+    return _in;
   }
-  int
-  get_read_fd()const
+  Stream*
+  stream_out()
   {
-    return _read_fd;
+    return _out;
+  }
+  void
+  stream_in(Stream*s)
+  {
+    _in=s;
+  }
+  void
+  stream_out(Stream*s)
+  {
+    _out=s;
   }
   
-  void
-  set_write_fd(int rfd)
-  {
-    _write_fd =rfd;
-  }
-  int
-  get_write_fd()const
-  {
-    return _write_fd;
-  }
-
   bool
   data_buffered()
   {
@@ -54,18 +72,16 @@ public:
       return false;
     return (_buf->pos < _buf->len);
   }
-  
-  // returns true if finished
-  // perform one io system call only
-  bool
-  io();
-
   void
-  close();
+  write_out();
+  
+  // returns true if finished (may throw XferLimitException)
+  bool
+  io(XferLimit*limit=0);
 
   ~Sendfile()
   {
-    close();
+    free();
   }
 };
 

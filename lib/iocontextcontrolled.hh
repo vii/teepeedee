@@ -9,7 +9,14 @@
 class IOContextControlled:public virtual IOContext
 {
   IOController*_control;
-  
+  void notify(bool happy)
+  {
+    if(!_control)
+      return;
+
+    _control->xfer_done(this,happy);
+    detach();
+  }
 public:
   IOContextControlled(IOController*c):_control(c)
   {
@@ -21,18 +28,15 @@ public:
   }
   
   void
-  successful(bool happy=true)
+  completed(bool happy=true)
   {
-    if(!_control)
-      return;
-    
-    _control->xfer_done(this,happy);
-    detach();
+    notify(happy);
+    delete_this();
   }
 
   ~IOContextControlled()
   {
-    successful(false);
+    notify(false);
   }
 };
 

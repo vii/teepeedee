@@ -66,6 +66,11 @@ public:
   {
     return get_html_quoted();
   }
+  std::string
+  authority()const
+  {
+    return _authority;
+  }
 
   std::string
   get_html_quoted()const

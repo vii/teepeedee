@@ -55,20 +55,19 @@ protected:
   }
   
   void
-  finished_writing(class XferTable&xt)
+  finished_writing()
   {
+    next_entry();
     if(no_entries_left()) {
-      finished_listing(xt);
+      finished_listing();
       return;
     }
-    next_entry();
   }
   virtual
   void
-  finished_listing(class XferTable&xt)
+  finished_listing()
   {
-    successful();
-    hangup(xt);
+    completed();
   }
 
   virtual

@@ -9,7 +9,7 @@ class FileLister
 public:
   virtual
   bool
-  last()const
+  last()const//true if no more files left
     =0;
   
   virtual void

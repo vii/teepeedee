@@ -63,8 +63,9 @@ ConfTree::get(const std::string&name,std::string&val)const
   open(in,name);
 
   val = std::string();
-  while(in.good())
-    val += in.get();
+  for(char c;in.good();val+=c){
+    c = in.get();
+  }
 }
 
 void
@@ -73,6 +74,13 @@ ConfTree::open(class std::ifstream&i,const std::string&n)const
   i.open(make_path(n).c_str(), std::ifstream::in);
   if(!i.good())
     throw ConfException(n,"unable to read file");
+}
+void
+ConfTree::open(class std::ofstream&i,const std::string&n)const
+{
+  i.open(make_path(n).c_str(), std::ofstream::out);
+  if(!i.good())
+    throw ConfException(n,"unable to write file");
 }
 
 void
@@ -89,21 +97,6 @@ ConfTree::get_line(const std::string&name,std::string&val)const
 }
 
 
-void
-ConfTree::get(const std::string&n,int&i)const
-{
-  std::string v;
-  get(n,v);
-
-  if(v.empty())
-    throw ConfException(n,"empty string: not a valid integer");
-
-  char *s;
-  i = strtol(v.c_str(),&s,0);
-  
-  if(s == v.c_str())
-    throw ConfException(n,"not a valid integer");
-}
 
 void
 ConfTree::get_ipv4_addr(const std::string&n,uint32_t&inaddr)const
@@ -133,7 +126,7 @@ ConfTree::get(const std::string&name,ConfTree&tree)const
 }
 
 void
-ConfTree::get(const std::string&name,std::time_t&out)const
+ConfTree::get_seconds(const std::string&name,std::time_t&out)const
 {
   std::string v;
   get(name,v);
@@ -156,7 +149,7 @@ ConfTree::get_timeout(const std::string&name,IOContext&ioc)const
     return;
   }
   time_t t;
-  get(name,t);
+  get_seconds(name,t);
   ioc.set_timeout_interval(t);
 }
 

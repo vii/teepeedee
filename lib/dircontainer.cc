@@ -1,12 +1,13 @@
-#include "dircontainer.hh"
+#include <errno.h>
 
-#include "config.h"
+#include "dircontainer.hh"
 
 #ifndef HAVE_READDIR_R
 static
 int readdir_r(DIR *d, struct dirent *e,
 		struct dirent **r)
 {
+  errno = 0; // ffs is this stupid
   *r = readdir(d);
   if(!*r){
     if(errno)
@@ -18,7 +19,7 @@ int readdir_r(DIR *d, struct dirent *e,
 #endif
 
 void
-DirContainer::read_next()
+DirContainer::iterator::read_next()
 {
   if(!_stream)
     return;

@@ -3,24 +3,24 @@ noinst_LIBRARIES = libteepeedee.a
 
 
 
-libteepeedee_a_SOURCES = xfertable.cc \
-	listener.cc \
+libteepeedee_a_SOURCES = streamtable.cc \
 	conftree.cc \
-	iocontext.cc \
 	iocontextwriter.cc \
 	iocontextresponder.cc \
 	sendfile.cc \
 	path.cc \
-	iocontextxfer.cc \
-	uri.cc
+	uri.cc \
+	dircontainer.cc \
+	stream.cc \
+	streamfd.cc
 
 
 
 
-noinst_HEADERS = xfertable.hh \
+
+noinst_HEADERS = streamtable.hh \
 	iocontext.hh \
 	dircontainer.hh \
-	listener.hh \
 	conftree.hh \
 	iocontextwriter.hh \
 	path.hh \
@@ -37,4 +37,13 @@ noinst_HEADERS = xfertable.hh \
 	iocontextcontrolled.hh \
 	iocontroller.hh \
 	uri.hh \
-	filelisterglob.hh
+	filelisterglob.hh \
+	xferlimit.hh \
+	xferlimitexception.hh \
+	limitexception.hh \
+	streamfd.hh \
+	stream.hh \
+	streamopenssl.hh \
+	opensslexception.hh \
+	iocontextopenssl.hh
+
