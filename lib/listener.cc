@@ -44,25 +44,28 @@ Listener::desc()const
 bool
 Listener::io(const struct pollfd&pfd,class XferTable&xt)
 {
-  bool changed = false;
-
-  for(;;) {
-    int newfd = accept(get_fd(),0,0);
+  int newfd = accept(get_fd(),0,0);
   
-    if(newfd == -1){
-      if(errno == EWOULDBLOCK)
-	break;
+  if(newfd == -1){
+    if(errno == EWOULDBLOCK)
+      return false;
     
-      warn("accept");
-      break;
-    }
+    warn("accept");
+    return false;
+  }
 
-    set_nonblock(newfd);
-    if(new_connection(newfd,xt))
-      changed = true;
+  set_nonblock(newfd);
+  Stream*s;
+  try{
+    s=stream_factory(newfd);
+  } catch (...){
+    ::close(newfd);
+    throw;
   }
   
-  return changed;
+  if(new_connection(s,xt))
+    return true;
+  return false;
 }
 
   
