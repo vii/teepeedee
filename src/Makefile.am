@@ -2,6 +2,8 @@ sbin_PROGRAMS = teepeedee
 
 
 
+
+
 teepeedee_SOURCES = main.cc \
 	user.cc \
 	serverhttp.cc \
@@ -14,6 +16,9 @@ teepeedee_SOURCES = main.cc \
 	ftpcontrol.cc \
 	ftpdatalistener.cc \
 	ftplistlong.cc
+
+
+
 
 
 
@@ -31,7 +36,12 @@ noinst_HEADERS =	user.hh \
 	ftplist.hh \
 	ftplistlong.hh \
 	ftplistmlsd.hh \
-	ftpmlstprinter.hh
+	ftpmlstprinter.hh \
+	xferlimituser.hh \
+	serverssl.hh \
+	serverhttps.hh \
+	serverftp.hh
+
 
 
 

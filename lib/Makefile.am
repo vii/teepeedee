@@ -46,5 +46,9 @@ noinst_HEADERS = streamtable.hh \
 	stream.hh \
 	streamopenssl.hh \
 	opensslexception.hh \
-	iocontextopenssl.hh
+	iocontextopenssl.hh \
+	streamcontainer.hh \
+	time.hh \
+	sslstreamfactory.hh \
+	iocontextlistener.hh
 
