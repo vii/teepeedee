@@ -27,7 +27,7 @@ SSLStreamFactory::SSLStreamFactory():_ssl_ctx(0)
   if(!_ssl_ctx)
     throw OpenSSLException("SSL_CTX_new");
   
-  SSL_CTX_set_default_read_ahead((SSL_CTX*)_ssl_ctx,0);
+  //  SSL_CTX_set_default_read_ahead((SSL_CTX*)_ssl_ctx,0);
   SSL_CTX_set_mode((SSL_CTX*)_ssl_ctx,SSL_MODE_ENABLE_PARTIAL_WRITE);
   
   //XXX setting this line is necessary at least for IOContextWriter,

@@ -1,3 +1,14 @@
+2003-06-21  John Fremlin  <john@fremlin.de>
+
+	* src/ftpcontrol.cc (passive_off): call _data_listener->detach to
+	avoid segfault
+
+2003-06-10  John Fremlin  <john@fremlin.de>
+
+	* src/serverssl.hh (read_config): do not commit suicide on failure
+
+	* src/ftpcontrol.cc (~FTPControl): when FTPControl dies, tell dependents
+
 2003-05-24  John Fremlin  <john@fremlin.de>
 
 	* lib/stream.cc (listen_queue_length): raised to 128

@@ -19,6 +19,7 @@ public:
     try{
       read_config_ssl();
     } catch (...){
+      ret->release_consumer();
       delete ret;
       throw;
     }
