@@ -1,4 +1,27 @@
+2002-12-31  John Fremlin  <john@fremlin.de>
+
+	* lib/iocontextresponder.cc (report_connect): added
+
+	* src/server.cc (read_config): use reuse_addr
+
+	* lib/xfertable.cc (check_timeouts): moved out of do_poll
+
+	* lib/iocontext.cc (sockaddr_to_str): remove pointless '\0'
+
+2002-12-30  John Fremlin  <john@fremlin.de>
+
+	* lib/iocontext.hh (class IOContext): do not call timedout wrongly
+
+	* lib/iocontext.cc (set_reuse_addr): added
+
+	* lib/iocontextresponder.cc (read_in): hangup on EOF
+	(io): handle hangup in read_in
+
+	* lib/listener.cc (io): loop round accept
+
 2002-12-21  John Fremlin  <john@fremlin.de>
+
+	* lib/iocontext.cc (getsockname): fix error reporting
 
 	* src/ftplistlong.cc (prepare_entry): pad out listing items
 	to make them more readable [reported by Felix von Leitner]

@@ -22,7 +22,7 @@ listen_queue_length()
 Listener::events_t
 Listener::get_events()
 {
-  return POLLIN;
+  return POLLIN|POLLOUT;
 }
   
 
@@ -44,21 +44,25 @@ Listener::desc()const
 bool
 Listener::io(const struct pollfd&pfd,class XferTable&xt)
 {
-  struct sockaddr_in sa;
-  size_t sa_siz = sizeof sa;
-  
-  int newfd = accept(get_fd(),(sockaddr*)&sa,&sa_siz);
-  
-  if(newfd == -1){
-    if(errno == EWOULDBLOCK)
-      return false;
-    
-    warn("accept");
-    return false;
-  }
+  bool changed = false;
 
-  set_nonblock(newfd);
-  return new_connection(newfd,xt);
+  for(;;) {
+    int newfd = accept(get_fd(),0,0);
+  
+    if(newfd == -1){
+      if(errno == EWOULDBLOCK)
+	break;
+    
+      warn("accept");
+      break;
+    }
+
+    set_nonblock(newfd);
+    if(new_connection(newfd,xt))
+      changed = true;
+  }
+  
+  return changed;
 }
 
   

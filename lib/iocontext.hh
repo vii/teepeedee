@@ -21,7 +21,7 @@ public:
 
   typedef int events_t;
 
-  IOContext():_fd(-1),_max_idle(0),_timeout_time(-1)
+  IOContext():_fd(-1),_max_idle(0),_timeout_time(0)
   {
   }
 
@@ -63,6 +63,7 @@ public:
   set_timeout_interval(std::time_t i)
   {
     _max_idle = i;
+    _timeout_time = 0;
   }
 
   bool
@@ -96,10 +97,17 @@ public:
   check_timeout(std::time_t now,XferTable&xt)
   {
     if(!has_timeout())return false;
-    if(now > get_timeout()){
+    std::time_t limit = get_timeout();
+    
+    if(!limit){
+      reset_timeout(now);
+      return false;
+    }
+    if(now > limit){
       reset_timeout(now);
       return timedout(xt);
     }
+
     return false;
   }
   
@@ -158,14 +166,19 @@ public:
   {
     set_nonblock(get_fd());
   }
+
+  void
+  setsockopt(int LEVEL, int OPTNAME, void
+	     *OPTVAL, socklen_t OPTLEN)
+    ;
+  
+  void
+  set_reuse_addr(bool on=true)
+    ;
   
   static
   void
   set_nonblock(int fd)
-    ;
-
-  void
-  set_bind_reuseaddr(bool on=true)
     ;
 
   void

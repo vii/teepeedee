@@ -63,6 +63,7 @@ const FTPControl::ftp_cmd FTPControl::ftp_cmd_table[] = {
 
 FTPControl::FTPControl(int fd,const ConfTree&conf)
   :
+  IOContextResponder(fd),
   _conf(conf),
   _authenticated(false),
   _data_listener(0),
@@ -70,7 +71,6 @@ FTPControl::FTPControl(int fd,const ConfTree&conf)
   _restart_pos(0),
   _quitting(false)
 {
-  set_fd(fd);
   std::string greet;
   
   {
@@ -123,7 +123,7 @@ FTPControl::start_xfer(XferTable&xt,IOContextControlled*xfer)
     xfer->become_ipv4_socket();
     xfer->set_nonblock();
     try{
-      xfer->set_bind_reuseaddr();
+      xfer->set_reuse_addr();
       struct sockaddr_in sai;
       getsockname(sai);
       xfer->bind_ipv4(sai.sin_addr.s_addr,htons(ntohs(sai.sin_port)-1));

@@ -115,14 +115,6 @@ IOContext::set_nonblock(int fd)
     throw UnixException("fcntl(F_SETFL)");
 }
 
-void
-IOContext::set_bind_reuseaddr(bool on)
-{
-  int val = on ? 1 : 0;
-  if(setsockopt(get_fd(), SOL_SOCKET, SO_REUSEADDR, &val,sizeof val))
-    throw UnixException("setsockopt(fd,SOL_SOCKET, SO_REUSEADDR,...)");
-}
-
 static
 std::string
 sockaddr_to_str(const sockaddr_in&sai)
@@ -130,7 +122,7 @@ sockaddr_to_str(const sockaddr_in&sai)
   std::ostringstream s;
   char buf[50];
   inet_ntop (AF_INET, &sai.sin_addr.s_addr, buf,sizeof buf);
-  s << buf << ':' << ntohs(sai.sin_port) << '\0';
+  s << buf << ':' << ntohs(sai.sin_port);
   
   return s.str();
 }
@@ -147,7 +139,7 @@ void
 IOContext::getsockname(void*addr,socklen_t*len)const
 {
   if(::getsockname(get_fd(),(sockaddr*)addr,len))
-    throw UnixException("getsockname on FTP control socket");
+    throw UnixException("getsockname on "+desc());
 }
 
 std::string
@@ -169,7 +161,7 @@ void
 IOContext::getpeername(void*addr,socklen_t*len)const
 {
   if(::getpeername(get_fd(),(sockaddr*)addr,len))
-    throw UnixException("getpeername on FTP control socket");
+    throw UnixException("getpeername on "+desc());
 }
 
 std::string
@@ -179,3 +171,19 @@ IOContext::getpeername()const
   getpeername(sai);
   return sockaddr_to_str(sai);
 }
+
+void
+IOContext::setsockopt(int LEVEL, int OPTNAME, void
+		      *OPTVAL, socklen_t OPTLEN)
+{
+  if(-1 == ::setsockopt(get_fd(),LEVEL,OPTNAME,OPTVAL,OPTLEN))
+    throw UnixException("setsockopt");
+}
+
+void
+IOContext::set_reuse_addr(bool on)
+{
+  int opt = on ? 1 : 0;
+  setsockopt(SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt));
+}
+

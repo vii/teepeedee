@@ -16,6 +16,10 @@ class IOContextResponder : public IOContextWriter
   bool _closing;
 
   void
+  report_connect()
+    ;
+  
+  bool
   read_in(XferTable&xt)
     ;
 
@@ -74,10 +78,14 @@ protected:
       prepare_io();
   }
 public:
-  IOContextResponder():
+  IOContextResponder(int fd=-1):
     _buf_write_pos(0),
     _closing(false)
   {
+    if(fd != -1) {
+      set_fd(fd);
+      report_connect();
+    }
   }
   
   

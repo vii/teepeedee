@@ -20,10 +20,10 @@
 
 
 HTTPControl::HTTPControl(int fd, const ConfTree&c):
+  IOContextResponder(fd),
   _conf(c),
   _xfer(0)
 {
-  set_fd(fd);
   reset_req();
 }
 

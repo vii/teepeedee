@@ -24,7 +24,9 @@ bool IOContextResponder::io(const struct pollfd&pfd,class XferTable&xt)
     return true;
   }
     
-  read_in(xt);
+  if(read_in(xt))
+    return true;
+  
   return response_ready();
 }
 
@@ -39,7 +41,7 @@ IOContextResponder::prepare_io()
     prepare_read();
 }
 
-void
+bool
 IOContextResponder::read_in(XferTable&xt)
 {
   char*end = _buf + sizeof(_buf);
@@ -49,15 +51,15 @@ IOContextResponder::read_in(XferTable&xt)
     ssize_t retval = read(get_fd(),start,1);
     if(retval == 0){
       *start = 0;
-      read_done(xt);
-      return;
+      hangup(xt);
+      return true;
     }
     if(retval == -1){
       if(errno == EAGAIN)
-	return;
+	return false;
       warn("read failed");
       hangup(xt);
-      return;
+      return true;
     }
     
     if(retval == 1){
@@ -70,15 +72,23 @@ IOContextResponder::read_in(XferTable&xt)
 	  _buf_write_pos--;
 	}
 	read_done(xt);
-	return;
+	return false;
       }
     }
   }
 
   _buf_write_pos = 0;
   input_line_too_long(xt);
+  return false;
 }
 
+void
+IOContextResponder::report_connect()
+{
+  std::cerr << "+++ " << getpeername()
+	    << " connecting to " << desc()
+	    << std::endl;
+}
 
 void
 IOContextResponder::finished_writing(class XferTable&xt)

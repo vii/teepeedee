@@ -14,6 +14,9 @@ Server::read_config(const std::string&confname)
     _conf.get_ipv4_addr("bind_addr",inaddr);
   _conf.get("bind_port",port);
 
+  if(get_fd() == -1)
+    become_ipv4_socket();
+  set_reuse_addr();
   bind_ipv4(inaddr,htons(port));
   listen();
 }
