@@ -1,7 +1,7 @@
 bin_PROGRAMS = teepeedee
 bin_SCRIPTS = teepeedee-share
 
-
+EXTRA_DIST = teepeedee-share
 
 
 teepeedee_SOURCES = main.cc \
