@@ -14,3 +14,6 @@
 * 20040129: version 0.3.0:
 	Rewritten configuration mechanism
 	New teepeedee-share script to automatically create a configuration
+* 20040607: version 0.3.1:
+	License update
+	Include manpage

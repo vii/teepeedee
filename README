@@ -16,6 +16,8 @@ ftp simultaneously, listening on any number of ports and providing
 entirely different views of the filesystem to different users. It uses
 sendfile and is written in C++.
 
+The license is laid out in the file COPYING.teepeedee.
+
 teepeedee certainly used to run on FreeBSD i586 4.7-STABLE, Linux i686
 2.4.20 with glibc 2.3, Debian i686 Woody (20021220), Debian PPC
 Unstable (20021220).
