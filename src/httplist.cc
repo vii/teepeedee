@@ -41,7 +41,7 @@ HTTPList::prepare_entry()
   } catch (const User::AccessException&){
   }
   
-  set_entry("<LI><A href=\"" + uri.get_html_quoted() + "\">" + name + "</A>" + extra_info + "</LI>\n");
+  set_entry("<LI><A href=\"/" + uri.get_html_quoted() + "\">" + name + "</A>" + extra_info + "</LI>\n");
 }
 
 void
