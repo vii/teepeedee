@@ -3,8 +3,9 @@ Description
 
 teepeedee is a small, hopefully scalable, single-threaded file
 server. It can serve multiple files over http and ftp simultaneously,
-listening on any number of ports. It uses sendfile and is written in
-C++.
+listening on any number of ports and providing entirely different
+views of the filesystem to different users.. It uses sendfile and is
+written in C++.
 
 teepeedee certainly runs on FreeBSD i586 4.7-STABLE, Linux i686 2.4.20
 with glibc 2.3, Debian i686 Woody (20021220), Debian PPC Unstable

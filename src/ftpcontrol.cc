@@ -284,12 +284,13 @@ FTPControl::do_cmd_list(XferTable&xt,const std::string&argument,bool detailed)
   std::string arg = argument;
 
   FileLister*fl;
-  if(!argument.empty() && argument[0] == '-') {
-    std::string::size_type s = argument.find(' ');
-    // ignore -options from stupid clients [like glftp] who try to
-    // send us flags to ls(1)
+
+  // ignore -options from stupid clients [like gftp] who try to
+  // send us flags to ls(1)
+  while(!arg.empty() && arg[0] == '-') {
+    std::string::size_type s = arg.find(' ');
     if(s != std::string::npos)
-      arg = argument.substr(s+1);
+      arg = arg.substr(s+1);
     else
       arg = std::string();
   }
@@ -475,7 +476,7 @@ FTPControl::finished_reading(XferTable&xt,char*buf,size_t len)
   }
 
   for(std::string::iterator i=name.begin();i!=name.end();){
-    if(iscntrl(*i)) // be lazy and ignore control sequences
+    if(!isalnum(*i)) // be lazy and ignore control sequences
       i=name.erase(i);
     else{
       *i = std::tolower(*i);      

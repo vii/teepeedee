@@ -407,6 +407,7 @@ HTTPControl::do_cmd_get(XferTable&xt,bool actually_send_data)
   if(!buf.is_dir()){
     response_header_line("Content-Length",buf.size());
   } else {
+    response_header_line("Content-Type","text/html");
     close_after_output(); //no content length so must close
   }
   response_header_end();

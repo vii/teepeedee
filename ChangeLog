@@ -1,6 +1,15 @@
+2002-12-21  John Fremlin  <john@fremlin.de>
+
+	* src/ftplistlong.cc (prepare_entry): pad out listing items
+	to make them more readable [reported by Felix von Leitner]
+
+	* src/httpcontrol.cc (do_cmd_get): add Content-Type to directory
+	listings [reported by Felix von Leitner]
+
 2002-12-20  John Fremlin  <john@fremlin.de>
 
 	* src/ftpcontrol.cc (do_cmd_list): ignore ls(1) options
+	(finished_reading): more viciously strip control sequences
 
 	* src/httplist.cc (prepare_entry): add initial "/" so as not to
 	confuse browsers
