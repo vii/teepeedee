@@ -6,21 +6,26 @@
 #include <ctime>
 #include <sys/types.h>
 
-class IOContext;
+class Stream;
+class StreamFD;
 
-typedef std::list<IOContext*> XferTable_super;
-class XferTable : private XferTable_super
+// Stream's based on filedescriptors are treated differently in order
+// to do poll on them.
+class XferTable : private std::list<Stream*>
 {
-  typedef std::map<int,IOContext*> _fd_to_xfer_type;
+  typedef std::list<Stream*> super;
+  typedef std::map<int,StreamFD*> _fd_to_xfer_type;
   _fd_to_xfer_type _fd_to_xfer;
 
   size_t
-  fill_fds(struct pollfd*fds, size_t nfds, bool& do_sweep)
+  fill_fds(struct pollfd*fds, size_t nfds, bool& has_timeout)
   ;
 
   bool
-  check_timeouts(std::time_t now, std::time_t& last_sweep,bool&do_sweep)
+  check_timeouts(std::time_t now, std::time_t& last_sweep,bool&has_timeout)
     ;
+
+  bool reap();
   
 public:
   void
