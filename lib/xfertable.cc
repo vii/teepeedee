@@ -11,6 +11,22 @@
 
 #define DBG(x) do { ; } while(0)
 
+bool XferTable::reap() {
+  if(_dead_ios.empty())return false;
+  bool changed=false;
+  for(_dead_ios_type::iterator i=_dead_ios.begin();
+      i!=_dead_ios.end();){
+    if(!(*i)->active() || !(*i)->get_stream_events()) {
+      delete *i;
+      i=erase(i);
+      changed = true;
+    } else
+      ++i;
+  }
+  
+  return changed;
+}
+
 static
 std::time_t sweep_interval(){
   return 30;
@@ -25,6 +41,7 @@ XferTable::del(IOContext*ic)
     if(i != _fd_to_xfer.end())
       _fd_to_xfer.erase(i);
   }
+  _dead_ios.push_back(ic);
 }
 
 void
@@ -34,7 +51,7 @@ XferTable::poll()
 }
 
 size_t
-XferTable::fill_fds(struct pollfd*fds, size_t nfds, bool& do_sweep)
+XferTable::fill_fds(struct pollfd*fds, size_t nfds, bool&has_timeout)
 {
   _fd_to_xfer.erase(_fd_to_xfer.begin(),_fd_to_xfer.end());
   if(!nfds)
@@ -48,12 +65,12 @@ XferTable::fill_fds(struct pollfd*fds, size_t nfds, bool& do_sweep)
     DBG(std::cout << (*i)->get_fd() << ":\t" << (*i)->desc() << ' ' << *i << std::endl);
     if(!(*i)->active())
       continue;
-
-    if((*i)->get_timeout() != -1)
-      do_sweep = true;
+    if((*i)->has_timeout())
+      has_timeout = true;
 
     fds[j].fd = (*i)->get_fd();
-    fds[j].events = (*i)->get_events();
+    fds[j].events = (*i)->get_stream_events();
+    if(!fds[j].events)fds[j].events=(*i)->get_events();
     fds[j].events |= POLLHUP;
     if(_fd_to_xfer.find(fds[j].fd)!=_fd_to_xfer.end())
       errx(1,"internal error: two active IOContexts with same fd!");
@@ -66,22 +83,17 @@ XferTable::fill_fds(struct pollfd*fds, size_t nfds, bool& do_sweep)
 }
 
 bool
-XferTable::check_timeouts(std::time_t now, std::time_t& last_sweep,bool&do_sweep)
+XferTable::check_timeouts(std::time_t now, std::time_t& last_sweep,bool&has_timeout)
 {
   bool rebuild_table = false;
   if(now > last_sweep + sweep_interval()){
     last_sweep = now;
-    do_sweep = false;
 
-  checkloop:
     for(iterator i = begin(); i != end(); ++i){
-      if((*i)->check_timeout(now,*this)) {
+      if((*i)->check_timeout(now,*this))
 	rebuild_table = true;
-	goto checkloop;
-      } else {
-	if((*i)->has_timeout())
-	  do_sweep = true;
-      }
+      else if((*i)->has_timeout())
+	has_timeout = true;
     }
   }
   return rebuild_table;
@@ -92,15 +104,16 @@ XferTable::do_poll()
 {
   size_t total_fds = size();
   bool rebuild_table = false;
+  bool has_timeout;
   if(!total_fds)return true;
   
   struct pollfd *fds = new pollfd[total_fds];
   
   try{
     rebuild_table = false;
-    bool do_sweep = false;
+    has_timeout = false;
 
-    size_t nfds = fill_fds(fds,total_fds,do_sweep);
+    size_t nfds = fill_fds(fds,total_fds,has_timeout);
     
     if(!nfds)
       goto out;
@@ -108,7 +121,7 @@ XferTable::do_poll()
     std::time_t last_sweep = 0;
   
     for(;;){
-      int events = ::poll(fds,nfds,do_sweep ? sweep_interval() : -1);
+      int events = ::poll(fds,nfds,has_timeout ? sweep_interval() : -1);
 
       if(events==-1){
 	if(errno == EINTR)
@@ -146,9 +159,11 @@ XferTable::do_poll()
 	  }
 	}
 
-      if(check_timeouts(now,last_sweep,do_sweep))
+      if(reap())
 	rebuild_table = true;
-    
+      if(check_timeouts(now,last_sweep,has_timeout))
+	rebuild_table = true;
+      
       if(rebuild_table)
 	break;
     }
