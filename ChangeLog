@@ -1,5 +1,10 @@
 2002-12-20  John Fremlin  <john@fremlin.de>
 
+	* src/ftpcontrol.cc (do_cmd_list): ignore ls(1) options
+
+	* src/httplist.cc (prepare_entry): add initial "/" so as not to
+	confuse browsers
+
 	* lib/iocontextxfer.cc (hangup): fixed problem where buffered data
 	would not be written out due to data connection hanging up
 
