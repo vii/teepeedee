@@ -10,9 +10,9 @@
 #include "permitsignals.hh"
 
 #undef debug
-#define debug(x) do {}while(0)
-#undef debug
 #define debug(x) warnx x
+#undef debug
+#define debug(x) do {}while(0)
 
 void
 StreamTable::remove(IOContext*ioc)
