@@ -12,6 +12,7 @@
 #include <filelister.hh>
 #include <confexception.hh>
 #include <path.hh>
+#include <streamcontainer.hh>
 
 #include "xferlimituser.hh"
 #include "httpcontrol.hh"
@@ -19,13 +20,13 @@
 
 
 
-HTTPControl::HTTPControl(const ConfTree&c,const std::string&proto):
-  Control(c),
+HTTPControl::HTTPControl(const ConfTree&c,StreamContainer&s,const std::string&proto):
+  Control(c,s),
   _protocol(proto),
-  _xfer(0),
-  _xfer_stream(0)
+  _xfer(0)
 {
   reset_req();
+  config().get_timeout("timeout_prelogin",*this);
 }
 
 bool
@@ -141,6 +142,8 @@ HTTPControl::authenticate(User&user)
 
   if(!user.authenticate("default-user","",config()))
     throw User::AccessException();
+
+  config().get_timeout("timeout_postlogin",*this);
 }
 
 void
@@ -334,6 +337,7 @@ HTTPControl::xfer_done(IOContextControlled*xfer,bool successful)
     warnx("internal error in HTTPControl::xfer_done");
     return;
   }
+  _xfer = 0;
 }
 
 
@@ -341,7 +345,9 @@ void
 HTTPControl::start_xfer(IOContextControlled*xfer,Stream*st)
 {
   _xfer = xfer;
-  _xfer_stream = st;
+  if(st)
+    stream_container().add(st);
+  config().get_timeout("timeout_xfer",*xfer);
 }
 
 Path
@@ -393,7 +399,6 @@ HTTPControl::start_file_xfer(Stream*fd,
     delete fd;
     throw;
   }
-    
   start_xfer(ioc,fd);
 }
 
@@ -601,8 +606,8 @@ HTTPControl::read_in_xfer(Stream&stream,size_t max)
     made_progress();
     try{
       _xfer->read(stream,max);
-    } catch (IOContext::Destroy&){
-      free_xfer();
+    } catch (IOContext::Destroy&d){
+      delete_xfer(d.target());
     }
     if(!_xfer)
       read_in(stream,max);
@@ -627,8 +632,8 @@ HTTPControl::write_out_xfer(Stream&stream,size_t max)
   made_progress();
   try{
     _xfer->write(stream,max);
-  } catch (IOContext::Destroy&){
-    free_xfer();
+  } catch (IOContext::Destroy&d){
+    delete_xfer(d.target());
   }
   if(!_xfer)
     return write_out(stream,max);
@@ -656,8 +661,8 @@ HTTPControl::want_write(Stream&stream)
   bool ret;
   try{
     ret = _xfer->want_write(stream);
-  } catch (const IOContext::Destroy&){
-    free_xfer();
+  } catch(IOContext::Destroy&d){
+    delete_xfer(d.target());
   }
   if(!_xfer)
     return super::want_write(stream);
@@ -671,8 +676,8 @@ HTTPControl::want_read(Stream&stream)
   bool ret;
   try{
     ret = _xfer->want_read(stream);
-  } catch (const IOContext::Destroy&){
-    free_xfer();
+  } catch (IOContext::Destroy&d){
+    delete_xfer(d.target());
   }
   if(!_xfer)
     return super::want_read(stream);

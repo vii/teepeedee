@@ -36,6 +36,13 @@ class Sendfile
   Sendfile(const Sendfile&)
   {
   }
+protected:
+  bool
+  has_buf()const
+  {
+    return _buf;
+  }
+  
   
 public:
   Sendfile(Stream*in,Stream*out):

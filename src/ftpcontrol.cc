@@ -69,19 +69,17 @@ const FTPControl::ftp_cmd FTPControl::ftp_cmd_table[] = {
 
 FTPControl::FTPControl(const ConfTree&conf,StreamContainer&sc,SSLStreamFactory*ssf)
   :
-  Control(conf),
+  Control(conf,sc),
   _data_listener(0),
   _data_xfer(0),
-  _data_xfer_stream(0),
-  _stream_container(sc),
   _ssl_factory(ssf),
   _restart_pos(0),
   _quitting(false),
   _turning_into_ssl(false),
   _unencrypted_stream(0)
 {
-  std::string greet;
-  config().get("greeting",greet);
+  std::string greet = "Service ready for new user.";
+  config().get_if_exists("greeting",greet);
   config().get_timeout("timeout_prelogin",*this);
   make_response_multiline("220",greet);
 }
@@ -104,11 +102,13 @@ FTPControl::remote_stream(const Stream&stream)
 void
 FTPControl::xfer_done(IOContextControlled*xfer,bool success)
 {
-  if(xfer != _data_xfer)
-    warnx("internal error in FTPControl::xfer_done");
-  else{
+  if(xfer == _data_xfer) {
     _data_xfer = 0;
-    free_xfer();
+    if(_data_listener&&_data_listener->has_data()){
+      _data_listener->release_data();
+      _data_listener = 0;
+    }
+      
     if(_quitting)
       close_after_output();
       
@@ -116,8 +116,10 @@ FTPControl::xfer_done(IOContextControlled*xfer,bool success)
       make_response("226","Transfer complete");
     else
       make_response("426","Transfer closed due to error: timeout?");
+    config().get_timeout("timeout_postlogin",*this);
+  } else if (xfer == _data_listener) {
+    _data_listener = 0;
   }
-  config().get_timeout("timeout_postlogin",*this);
 }
 
 void
@@ -134,7 +136,8 @@ FTPControl::start_xfer(IOContextControlled*xfer,Stream*fd)
   }
 
   _data_xfer = xfer;
-  _data_xfer_stream = fd;
+  if(fd)
+    stream_container().add(fd);
   config().get_timeout("timeout_xfer",*xfer);
   set_timeout_interval(0);
   
@@ -164,23 +167,6 @@ FTPControl::cmd_dele(const std::string&argument)
     make_response("450","It's invincible!");
   }else
     make_response("250","Destruction complete");
-}
-
-void
-FTPControl::free_xfer()
-{
-  {
-    if(_data_xfer_stream){
-      _data_xfer_stream->release_consumer();
-      delete _data_xfer_stream;
-      _data_xfer_stream = 0;
-    }
-    if(passive()){
-      // permit PASV command while data xfer is taking place
-      if(_data_listener->has_data())
-	passive_off();
-    }
-  }
 }
 
 void
@@ -527,7 +513,6 @@ FTPControl::make_response_multiline(const std::string&code,const std::string&mul
 
 FTPControl::~FTPControl()
 {
-  free_xfer();
 }
 
 void
@@ -655,7 +640,7 @@ FTPControl::passive_on(bool epsv)
   config().get_if_exists("passive_port_min",pn);
   config().get_if_exists("passive_port_max",px);
 
-  _data_listener = new FTPDataListener;
+  _data_listener = new FTPDataListener(this);
   _data_listener->stream_container(&stream_container());
   Stream*s;
   try{

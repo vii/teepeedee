@@ -7,15 +7,10 @@
 #include "xferlimit.hh"
 #include "streamfd.hh"
 
-#ifndef HAVE_SENDFILE
-static
-ssize_t
-system_sendfile(int wfd, int rfd)
-{
-  return -1;
-}
-#else
+#if defined(HAVE_SENDFILE)&&defined(HAVE_DECL_SENDFILE)&& HAVE_DECL_SENDFILE
 #ifdef HAVE_SYS_SENDFILE_H
+
+#define SENDFILE_FUNCTION_PRESENT
 
 // This works on Linux at least
 #include <sys/sendfile.h>
@@ -27,9 +22,11 @@ system_sendfile(int wfd, int rfd)
   // XXX check up: suppose it returns 0 but in fact has something left to read?
   ssize_t ret = sendfile(wfd,rfd,0,(unsigned)-1);  
 
-  if(ret == -1 && errno != EINVAL && errno != ENOSYS)
+  if(ret == -1){
+    if(errno == EAGAIN)
+      return ret;
     throw UnixException("sendfile");
-  
+  }
   return ret;
 }
 
@@ -41,14 +38,16 @@ system_sendfile(int wfd, int rfd)
 #include <sys/uio.h>
 #include <fcntl.h>
 
+#define SENDFILE_FUNCTION_PRESENT
+
 // This one works at least on FreeBSD
 static
 ssize_t
 system_sendfile(int wfd, int rfd)
 {
   off_t pos = lseek(rfd,0,SEEK_CUR);
-  if(pos == -1)
-    return -1;
+  if(pos==-1)
+    throw UnixException("lseek before sendfile");
   
   off_t written = 0;
   int ret = sendfile(rfd,wfd,pos,0,0,&written,0);
@@ -57,17 +56,15 @@ system_sendfile(int wfd, int rfd)
     if(errno == EAGAIN) {
       if(lseek(rfd,written,SEEK_CUR) == -1)
 	throw UnixException("lseek after sendfile");
-      return written;
+      return written?written:-1;
     }
-    if(errno != EINVAL && errno != ENOTSOCK)
-      throw UnixException("sendfile");
-    return -1;
+    throw UnixException("sendfile");
   }
   
   if(lseek(rfd,written,SEEK_CUR) == -1)
     throw UnixException("lseek after sendfile complete");
   
-  return 0;
+  return written;//here ret==0 so the sendfile is complete - should be able to inform
 }
 
 #endif
@@ -78,18 +75,23 @@ bool
 Sendfile::io(XferLimit*limit)
 {
   if(!_buf) {
+#ifdef SENDFILE_FUNCTION_PRESENT
     StreamFD*in,*out;
     if((in=dynamic_cast<StreamFD*>(_in))&&(out=dynamic_cast<StreamFD*>(_out))){
       ssize_t ret;
-      ret = system_sendfile(out->fd(),in->fd());
-      if(ret == 0)
-	return true;
-      if(ret != -1){
-	if(limit)limit->xfer(ret);
+      try{
+	ret = system_sendfile(out->fd(),in->fd());
+	if(ret == 0) {
+	  return true;
+	}
+	if(ret != -1){
+	  if(limit)limit->xfer(ret);
+	}
 	return false;
+      } catch (const UnixException&ue){
       }
-    
     }
+#endif    
     _buf = new Buf;
   }
 
@@ -101,10 +103,10 @@ Sendfile::io(XferLimit*limit)
 
   bool ret = read_in();
   if(limit)limit->xfer(_buf->len);
-  
+
   if(data_buffered())
     write_out();
-  
+
   return ret && !data_buffered();
 }
 

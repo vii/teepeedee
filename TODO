@@ -1,5 +1,6 @@
 * document options
 * performance test
+* fix sendfile
 
 * poll on linux takes at least one jiffy, so max rate with 64 KB buffers is 64 KB * HZ
 	- to solve this bottleneck could use mmap (but the address space is limited)

@@ -7,8 +7,21 @@ class IOContextWriter : public virtual IOContext
 {
   const char* _buf;
   unsigned _buf_len;
-  unsigned _buf_pos;  
+  unsigned _buf_pos;
+
+  void
+  do_finished_writing()
+  {
+    finished_writing();
+  }
+  
 protected:
+  unsigned
+  buf_len()const
+  {
+    return _buf_len;
+  }
+  
   bool
   write_buf_empty()const
   {
@@ -20,6 +33,12 @@ protected:
   {
   }
 
+  void reset_write_buf()
+  {
+    _buf = 0;
+    _buf_pos = 0;
+    _buf_len = 0;
+  }
   void set_write_buf(const char*buf,unsigned len)
   {
     move_write_buf(buf,len);
@@ -35,7 +54,7 @@ protected:
   want_write(Stream&stream)
   {
     if(write_buf_empty()){
-      finished_writing();
+      do_finished_writing();
     }
     return !write_buf_empty();
   }

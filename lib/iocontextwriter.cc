@@ -10,7 +10,7 @@ void
 IOContextWriter::write_out(Stream&stream,size_t max)
 {
   if(write_buf_empty()){
-    finished_writing();
+    do_finished_writing();
     if(write_buf_empty())
       return;
   }
@@ -22,9 +22,6 @@ IOContextWriter::write_out(Stream&stream,size_t max)
   size_t len = _buf_len - _buf_pos;
   ssize_t ret;
   ret = do_write(stream,_buf+_buf_pos,len);
-  if(ret == -1)
-    return;
-
   _buf_pos += ret;
 
   //  }
@@ -32,5 +29,5 @@ IOContextWriter::write_out(Stream&stream,size_t max)
   // need to tell producer as soon as writing finished or else it gets
   // confused (FTPControl)
   if(write_buf_empty())
-    finished_writing();
+    do_finished_writing();
 }

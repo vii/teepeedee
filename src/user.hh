@@ -25,6 +25,10 @@ class User
   ConfTree _conf;
   std::string _name;
 
+  // optimizations
+  bool _accounting_upload;
+  bool _accounting_download;
+
   // this field only signals whether this particular authentication
   // object was explicitly initialised with user_login and should decrement
   // the number of logins of the user when destroyed
@@ -121,10 +125,16 @@ private:
   ;
   
 public:
-  User():_authenticated(false)
+  User():
+	 _accounting_upload(true),
+	 _accounting_download(true),
+	 _authenticated(false)
   {
   }
-  User(const User&u):_conf(u._conf),_authenticated(false)
+  User(const User&u):_conf(u._conf),
+		     _accounting_upload(u._accounting_upload),
+		     _accounting_download(u._accounting_download),
+		     _authenticated(false)
   {
   }
 
@@ -202,8 +212,13 @@ public:
   bool
   book_xfer(off_t bytes,XferLimit::Direction::type dir)
   {
+    if(dir == XferLimit::Direction::download && !_accounting_download)
+      return true;
+    if(dir == XferLimit::Direction::upload && !_accounting_upload)
+      return true;
     return _conf.book_increment(XferLimit::Direction::to_string(dir)+"_bytes",xfer_limit(dir),bytes);
   }
+  
   std::string
   message_login()
     ;

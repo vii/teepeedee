@@ -9,10 +9,11 @@
 void
 Stream::free()
 {
-  if(_consumer){
-    if(_consumer->stream_hungup(*this))
-      delete _consumer;
-    _consumer=0;
+  if(consumer()){
+    IOContext*tmp = consumer();
+    if(tmp->stream_hungup(*this))
+      delete tmp;
+    release_consumer();
   }
 }
 
@@ -78,7 +79,7 @@ Stream::listen_ipv4_range(uint32_t inaddr,uint16_t port_min,uint16_t port_max)
 static
 inline unsigned listen_queue_length()
 {
-  return 10;
+  return 128;
 }
 
 Stream*

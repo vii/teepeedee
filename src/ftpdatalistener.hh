@@ -2,9 +2,10 @@
 #define _TEEPEEDEE_FTPDATALISTENER_HH
 
 #include <iocontextlistener.hh>
+#include <iocontextcontrolled.hh>
 
 class IOContext;
-class FTPDataListener : public IOContextListener
+class FTPDataListener : public IOContextListener, public IOContextControlled
 {
   typedef IOContextListener super;
   
@@ -13,12 +14,6 @@ class FTPDataListener : public IOContextListener
   bool finished()const
   {
     return _finished;
-  }
-  void
-  release_data()
-  {
-    _data = 0;
-    _finished = true;
   }
 protected:
   void // return true if want to read more
@@ -32,13 +27,21 @@ protected:
     super::read_in(stream,max);
   }
 public:
-  FTPDataListener():_data(0),_finished(false)
+  FTPDataListener(IOController*f):IOContextControlled(f),
+				  _data(0),
+				  _finished(false)
   {
   }
 
   void
   set_data(IOContext*fdc)
     ;
+  void
+  release_data()
+  {
+    _data = 0;
+    _finished = true;
+  }
 
   bool
   has_data()const

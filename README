@@ -2,18 +2,24 @@ Description
 ====
 
 teepeedee is a small, hopefully scalable, single-threaded file
-server. It can serve multiple files over http and ftp simultaneously,
-listening on any number of ports and providing entirely different
-views of the filesystem to different users.. It uses sendfile and is
-written in C++.
+server. It can serve or receive multiple files over http, https and
+ftp simultaneously, listening on any number of ports and providing
+entirely different views of the filesystem to different users. It uses
+sendfile and is written in C++.
 
 teepeedee certainly runs on FreeBSD i586 4.7-STABLE, Linux i686 2.4.20
 with glibc 2.3, Debian i686 Woody (20021220), Debian PPC Unstable
 (20021220).
 
+You make like to increase the rlimit'd number of open file descriptors
+to allow teepeedee to have more connnections (in the Bourne shell,
+ulimit -n).
+
 It is a very untested at the moment and does not have any DoS
 protection at all. Please report problems to the author, John Fremlin
 <john@fremlin.de>!
+
+Teepeedee can be found at http://john.fremlin.de/programs/teepeedee
 
 
 WARNING
@@ -61,5 +67,141 @@ servers will only be accessible from same computer they're running on;
 to change that either delete the bind_addr files or change the IP
 address in them.
 
-There are lots and lots of undocumented options and no documented ones
-:-(
+
+Root configuration structure
+==
+
+Under the main configuration directory each configurable item is
+stored in a single file so it is more a config tree than a config
+file.  In the main configuration directory (by default compile time
+configured to /etc/teepeedee or first command line argument) there are
+directories defining server classes. These are the recognised server
+classes: http, https, ftp. Inside each server class directory there
+can be an unlimited number of server configuration directories.
+
+For example you could have a layout like this
+	/etc/teepeedee/https/secret-server/
+	/etc/teepeedee/https/intranet-server/
+	/etc/teepeedee/ftp/downloads/
+	/etc/teepeedee/http/important-website/
+
+
+Generic server configuration
+==
+
+All server configuration directories can contain the following files
+and directories. All files are optional unless marked (required). Some
+files are written to, these are marked (written).
+
+bind_port - (required) contains port number to listen on as an ASCII
+	decimal (e.g. 8080)
+
+bind_addr - IP address to listen on
+
+timeout_prelogin - number of seconds of inactivity before closing the
+connection before the user is authenticated (logging in anonymously
+counts as authenticating)
+
+timeout_postlogin - number of seconds of inactivity before closing the
+connection after the user is authenticated
+
+timeout_xfer - number of seconds of inactivity before closing a file
+transfer or directory listing
+
+users/ - Users directory (described below)
+
+
+SSL server configuration
+==
+
+To function an SSL server needs the following files
+
+public_cert - public certificate in PEM format
+
+private_key - private key in PEM format
+
+
+HTTP(S) server configuration
+==
+
+HTTP and HTTPS server directories can contain the following additional
+configuration items. See the information for generic SSL servers to set
+the keys for HTTPS.
+
+canonical_server_name - the official name of the server that will be
+used in HTTP redirections. For example, it could contain the line
+www.example.com
+
+realm - HTTP authentication realm. If the realm is "Private members
+area". Browsers will say, Enter username and password for "Private
+members area".
+
+default-user/ - User directory if the user supplies incorrect or no
+authentication (described below)
+
+
+FTP server configuration
+==
+
+If you specify keys (as described in the information for generic SSL
+servers) the FTP server will do AUTH TLS control connection
+encryption. If you want to allow anonymous logins, create users "ftp"
+and "anonymous" with any_password_ok.
+
+passive_port_min - lowest port that the server will listen on for
+passive connections
+
+passive_port_max - highest port that the server will listen on for
+passive connections
+
+greeting - multiline welcome banner
+
+no_passive_mode - if this file exists the server will refuse a request
+to enter passive mode (where the client connects to another port on
+the server for the data transfer)
+
+no_port_mode - if this file exists the server will refuse to enter
+(where the server connects to a port on the client for the data
+transfer)
+
+
+Users directory
+==
+
+The users/ directory in each server's configuration contains a
+directory per user. The name of the directory is the username.
+
+
+User directories
+==
+
+Each user directory can contain the following files and directories
+
+homedir/ - root of the filesystem as visible to the user though
+symlinks will be followed
+
+password_plain - the user's password in plain text format
+
+password - the user's crypt(3)ed password
+
+any_password_ok - if this file exists the user may login without a
+password (HTTP) or with any password (FTP)
+
+logins - (written) contains the number of times the user is currently
+logged in, e.g. 10
+
+logins_max - maximum number of times the user can be logged in,
+e.g. 5
+
+upload_ratio - floating point number as an ASCII string,
+e.g. 5.00. For every byte uploaded, allows user to exceed the maximum
+downloaded bytes by this number of bytes.
+
+download_bytes - (written) number of bytes downloaded, e.g. 1023423
+
+download_bytes_max - approximate maximum number of bytes a user may
+download (may be extended with if upload_ratio is set). 0 means unlimited
+
+upload_bytes - (written) number of bytes uploaded
+
+upload_bytes_max - approximate number of bytes a user may upload

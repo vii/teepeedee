@@ -142,7 +142,7 @@ public:
   }
   ~StreamFD()
   {
-    shutdown();
+    close();
   }
   std::string
   localname()const

@@ -7,19 +7,27 @@
 #include <iocontextresponder.hh>
 #include <conftree.hh>
 
+class StreamContainer;
 class User;
 
 class Control : public IOContextResponder, public IOController
 {
   typedef IOContextResponder super;
+  StreamContainer&_stream_container;
   ConfTree _conf;
   bool _authenticated;
 protected:
   ConfTree&config(){return _conf;
   }
+  StreamContainer&
+  stream_container()
+  {
+    return _stream_container;
+  }
 public:
 
-  Control(const ConfTree&conf):_conf(conf),_authenticated(false)
+  Control(const ConfTree&conf,StreamContainer&s):_stream_container(s),
+						 _conf(conf),_authenticated(false)
   {
   }
 

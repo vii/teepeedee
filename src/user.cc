@@ -48,9 +48,11 @@ User::open_fd(const Path&fname,int flags,mode_t mode)
        || (!exist && !may_createfile(fname)))
       throw AccessException();
     off_t max = xfer_limit(XferLimit::Direction::upload);
-    off_t current = xfer_total(XferLimit::Direction::upload);
-    if(current >= max)
-      throw XferLimitException();
+    if(max){
+      off_t current = xfer_total(XferLimit::Direction::upload);
+      if(current >= max)
+	throw XferLimitException();
+    }
   } else if (!exist)
     throw AccessException();
   
@@ -145,6 +147,10 @@ User::authenticate(const std::string&username,
     throw LimitException();
   }
   _name = username;
+  if(!_conf.exists(XferLimit::Direction::to_string(XferLimit::Direction::download) + "_bytes"))
+    _accounting_download = false;
+  if(!_conf.exists(XferLimit::Direction::to_string(XferLimit::Direction::upload) + "_bytes"))
+    _accounting_upload = false;
   _authenticated = true;
   return true;
 }
@@ -339,7 +345,9 @@ User::do_print_limit(std::ostream&limits,XferLimit::Direction::type dir)
 {
   off_t max=0, current=0;
   max = xfer_limit(dir);
-  if(!max)
+  if(!max ||
+     (dir == XferLimit::Direction::download && !_accounting_download)
+     || (dir == XferLimit::Direction::upload && !_accounting_upload))
     limits << "There is no " << XferLimit::Direction::to_string(dir) << " limit.";
   else {
     limits << "The " << XferLimit::Direction::to_string(dir) << " limit was " << max << " bytes.";
@@ -367,7 +375,7 @@ User::message_limits()
   std::ostringstream limits;
   do_print_limit(limits,XferLimit::Direction::download);
   ratio_t rat = upload_ratio();
-  if(rat)
+  if(rat && _accounting_upload)
     limits << "For every byte you upload you may download " << rat << " more bytes.\n";
   do_print_limit(limits,XferLimit::Direction::upload);
   
@@ -391,7 +399,7 @@ User::message_directory(const Path&path)
   std::string ret;
   try{
     Path index(path);
-    index.push_back(".index");
+    index.push_back(".message");
     int fd=open_fd(index,O_RDONLY);
     char buf[8000];
     std::FILE*stream=fdopen(fd,"r");

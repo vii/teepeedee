@@ -26,8 +26,6 @@ class FTPControl : public Control
 
   FTPDataListener*_data_listener;//for passive mode
   IOContextControlled*_data_xfer;
-  Stream*_data_xfer_stream;
-  StreamContainer&_stream_container;
   SSLStreamFactory*_ssl_factory;
 
   // These values are things cached for the FTP protocol
@@ -56,11 +54,6 @@ class FTPControl : public Control
   };
   static const ftp_cmd ftp_cmd_table[];
   
-  StreamContainer&
-  stream_container()
-  {
-    return _stream_container;
-  }
 
   off_t take_restart_pos()
   {
@@ -107,10 +100,6 @@ class FTPControl : public Control
 	     Stream*fd=0)
     ;
 
-  void
-  free_xfer()
-    ;
-  
   void
   lose_auth()
   {

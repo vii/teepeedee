@@ -5,7 +5,7 @@
 #include "iocontext.hh"
 #include "streamcontainer.hh"
 
-class IOContextListener:public IOContext
+class IOContextListener:public virtual IOContext
 {
   StreamContainer*_table;
   

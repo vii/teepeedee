@@ -8,7 +8,8 @@
 #include "streamfd.hh"
 #include "iocontext.hh"
 
-#define debug(x) warnx(x)
+#undef debug
+#define debug(x) warnx x
 #undef debug
 #define debug(x) do {}while(0)
 
@@ -159,12 +160,16 @@ StreamTable::poll()
 	fds[fd].events = POLLHUP;
 	try{
 	  if(s->consumer()) {
-	    if(s->consumer()->want_read(*s))
+	    if(s->consumer()->want_read(*s)) {
+	      debug(("wants read %s:%s",s->desc().c_str(),s->consumer()?s->consumer()->desc().c_str():"<nul>"));
 	      fds[fd].events |= POLLIN;
+	    }
 	  }
 	  if(s->consumer()) {
-	    if(s->consumer()->want_write(*s))
+	    if(s->consumer()->want_write(*s)){
+	      debug(("wants write %s:%s",s->desc().c_str(),s->consumer()?s->consumer()->desc().c_str():"<nul>"));
 	      fds[fd].events |= POLLOUT;
+	    }
 	  }
 	} catch (IOContext::Destroy&d){
 	  remove(d.target());

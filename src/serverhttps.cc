@@ -8,7 +8,7 @@ static ServerRegistration registration("https",ServerHTTPS::factory,"Secure HTTP
 IOContext*
 ServerHTTPS::new_iocontext()
 {
-  return new HTTPControl(config(),"https");  
+  return new HTTPControl(config(),stream_container(),"https");  
 }
 
 #endif

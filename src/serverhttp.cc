@@ -7,5 +7,5 @@ static ServerRegistration registration("http",ServerHTTP::factory,"HTTP web serv
 IOContext*
 ServerHTTP::new_iocontext()
 {
-  return new HTTPControl(config());
+  return new HTTPControl(config(),stream_container());
 }

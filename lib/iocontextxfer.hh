@@ -19,10 +19,14 @@ class IOContextXfer : public IOContextControlled,public Sendfile
       delete _limit;
       _limit=0;
     }
+    if(stream_out() && stream_out()->consumer() == this)
+      stream_out()->release_consumer();
+    if(stream_in() && stream_in()->consumer() == this)
+      stream_in()->release_consumer();
   }
 
   void
-  do_io(Stream&stream)
+  do_io()
   {
     if(!stream_in() && data_buffered()){
       Sendfile::write_out();
@@ -58,22 +62,20 @@ public:
   bool
   stream_hungup(Stream&stream)
   {
-    if(&stream==stream_out()){
-      stream_out(0);
-      if(stream_in() && stream_in()->consumer() == this)
-	stream_in()->release_consumer();
-      return true;
-    }
-    if(&stream==stream_in()){
-      stream_in(0);
+    if(stream_in() && stream_in()->consumer() == this)
+      stream_in()->release_consumer();
+    if (stream_out() &&
+	&stream==stream_in() && &stream != stream_out()) {
       if(data_buffered()){
+	stream_in(0);
 	return false;
       }
-      if(stream_out() && stream_out()->consumer() == this)
-	stream_out()->release_consumer();
-      return true;
     }
-    return false;
+    if(stream_out() && stream_out()->consumer() == this)
+      stream_out()->release_consumer();
+    stream_out(0);
+    stream_in(0);
+    return true;
   }
 
   std::string
@@ -93,6 +95,8 @@ public:
       if(stream_in()!=&stream)
 	stream_out(&stream);
     }
+    if(has_buf() && !data_buffered())
+      return false;
     return &stream==stream_out();
   }
   bool want_read(Stream&stream)
@@ -101,10 +105,13 @@ public:
       if(stream_out()!=&stream)
 	stream_in(&stream);
     }
-    if(&stream!=stream_out())
+    if(data_buffered())
       return false;
-    
-    if(data_buffered())return false;
+    if(&stream!=stream_in())
+      return false;
+    if(!has_buf())
+      return false;
+
     return true;
   }
 
@@ -116,7 +123,9 @@ protected:
       if(stream_out()!=&stream)
 	stream_in(&stream);
     }
-    do_io(stream);
+    if(&stream!=stream_in())
+      return;
+    do_io();
   }
 
   void
@@ -126,7 +135,9 @@ protected:
       if(stream_in()!=&stream)
 	stream_out(&stream);
     }
-    do_io(stream);
+    if(&stream!=stream_out())
+      return;
+    do_io();
   }
 };
 

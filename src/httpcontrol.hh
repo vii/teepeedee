@@ -24,7 +24,6 @@ class HTTPControl : public Control
   unsigned _req_ver_minor;
   std::string _protocol;
   IOContextControlled* _xfer;
-  Stream*_xfer_stream;
   
   typedef std::map<std::string,std::string> _req_headers_type;
   _req_headers_type _req_headers;
@@ -107,7 +106,6 @@ class HTTPControl : public Control
     _req_ver_minor = 0;
     _req_ver_major = 0;
     _req_uri_is_dir = false;
-    config().get_timeout("timeout_prelogin",*this);
   }
 
   void
@@ -187,13 +185,18 @@ class HTTPControl : public Control
   }
 
   void
+  delete_xfer(IOContext*ioc)
+  {
+    if(ioc == _xfer){
+      free_xfer();
+      return;
+    }
+    delete ioc;
+  }
+  
+  void
   free_xfer()
   {
-    if(_xfer_stream){
-      _xfer_stream->release_consumer();
-      delete _xfer_stream;
-      _xfer_stream = 0;
-    }
     if(_xfer){
       delete _xfer;
       _xfer=0;
@@ -222,7 +225,7 @@ protected:
     ;
   
 public:
-  HTTPControl(const ConfTree&c,const std::string& proto="http")
+  HTTPControl(const ConfTree&c,StreamContainer&,const std::string& proto="http")
     ;
   
   void

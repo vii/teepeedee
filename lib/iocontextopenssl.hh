@@ -32,10 +32,6 @@ class IOContextOpenSSL : public IOContextWriter
     return ssl_buffer_too_big(_ssl_out);
   }
   
-  unsigned buf_size()const
-  {
-    return sizeof _buf;
-  }
   bool
   waiting(int ret)
   {
@@ -49,7 +45,7 @@ class IOContextOpenSSL : public IOContextWriter
   SSL*_ssl;
   BIO*_ssl_in; // data going into _SSL
   BIO*_ssl_out; // data coming out of _SSL
-  char _buf[1<<16];
+
   struct State
   {
     enum type { none,established,accept,shutdown,hungup };
@@ -96,7 +92,14 @@ class IOContextOpenSSL : public IOContextWriter
       
     }
   } 
-  
+  void
+  do_set_write_buf()
+  {
+    int left = BIO_pending(_ssl_out);
+    BUF_MEM *bptr;
+    BIO_get_mem_ptr(_ssl_out, &bptr);
+    move_write_buf(bptr->data,left);
+  }
   
   friend class StreamOpenSSL;
 protected:
@@ -121,9 +124,9 @@ protected:
 
     try_state_change();
 
-    char buf[4000]; // must be separate buffer because ssl might require protocol reads to continue writes
+    char buf[16000]; // must be separate buffer because ssl might require protocol reads to continue writes
     
-    max = (max && max < buf_size()) ? max : sizeof buf;
+    max = (max && max < sizeof buf) ? max : sizeof buf;
     ssize_t ret = do_read(stream,buf,max);
     if(ret == -1)
       return;
@@ -135,23 +138,29 @@ protected:
       throw OpenSSLException("BIO_write");
   }
   void
+  write_out(Stream&stream,size_t max)
+  {
+    if(dead()){
+      return;
+    }
+    do_set_write_buf();
+
+    super::write_out(stream,max);
+  }
+  void
   finished_writing()
   {
     if(dead()){
       return;
     }
-
     try_state_change();
-
-    int left = BIO_pending(_ssl_out);
-    if(!left){
+    
+    if(buf_len() != (unsigned)BIO_pending(_ssl_out)) {
+      do_set_write_buf();
       return;
     }
-    int ret = BIO_read(_ssl_out,_buf,left > (int)buf_size() ? buf_size() : left);
-
-    if(ret <= 0)
-      throw OpenSSLException("BIO_read");
-    set_write_buf(_buf,ret);
+    BIO_reset(_ssl_out);
+    reset_write_buf();
   }
 
   SSL*

@@ -1,3 +1,35 @@
+2003-05-24  John Fremlin  <john@fremlin.de>
+
+	* lib/stream.cc (listen_queue_length): raised to 128
+
+2003-05-23  John Fremlin  <john@fremlin.de>
+
+	* src/user.cc (message_directory): changed .index to more std .message
+
+2003-05-21  John Fremlin  <john@fremlin.de>
+
+	* lib/sendfile.cc (io): added SENDFILE_FUNCTION_PRESENT define for
+	libc 2.2 on Linux x86 which has the sendfile function but which
+	cannot be used because it does not have a 64bit off_t version
+
+	* lib/stream.hh: fixed FreeBSD compilation by including sys/socket.h
+
+2003-05-20  John Fremlin  <john@fremlin.de>
+
+	* lib/streamfd.hh (class StreamFD): when deleting StreamFD do
+	shutdown not close
+
+	* lib/iocontextxfer.hh (class IOContextXfer): only do_io if the
+	stream matches
+
+	* lib/sendfile.cc (system_sendfile): add EAGAIN to acceptable
+	sendfile errnos
+
+2003-05-19  John Fremlin  <john@fremlin.de>
+
+	* lib/iocontextopenssl.hh (class IOContextOpenSSL): changed so
+	does not use an internal buffer anymore
+
 2003-03-08  John Fremlin  <john@fremlin.de>
 
 	* src/ftpcontrol.cc: help for specific commands
