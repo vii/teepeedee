@@ -513,6 +513,11 @@ FTPControl::make_response_multiline(const std::string&code,const std::string&mul
 
 FTPControl::~FTPControl()
 {
+  if(xfer_pending()){
+    _data_xfer->detach();
+    _data_xfer = 0;
+  }
+  passive_off();
 }
 
 void
@@ -606,6 +611,7 @@ FTPControl::passive_off()
 {
   if(passive()){
     _data_listener->free();
+    _data_listener->detach();
     _data_listener = 0;
   }
   return true;
