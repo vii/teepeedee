@@ -14,11 +14,16 @@ class Listener:public IOContext
 {
   
 public:
-
+  virtual
+  Stream*stream_factory(int fd)
+  {
+    return new Stream(fd);
+  }
+  
   // returns true if the sit wrt XT has changed
   virtual
   bool
-  new_connection(int newfd,XferTable&xt)
+  new_connection(Stream*newstream,XferTable&xt)
     =0
   ;
 
