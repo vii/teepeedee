@@ -43,10 +43,10 @@ FTPListLong::prepare_entry()
   }
     //   s << "---------- 0 unstatable deleted 0 Jan  1 00:00 ";
   s << buf.rwx_string() << ' ';
-  s << buf.nlink() << ' ';
+  s << std::setw(4) << buf.nlink() << ' ';
   s << buf.username() << ' ';
   s << buf.groupname() << ' ';
-  s << buf.size() << ' ';
+  s << std::setw(12) << buf.size() << ' ';
   s << ftp_date(buf.mtime()) << ' ';
   s << entry_name() << "\r\n";
   set_entry(s.str());
