@@ -1,6 +1,7 @@
 #include <sstream>
 
 #include <cctype>
+#include <cstdlib>
 
 #include <unistd.h>
 #include <sys/poll.h>

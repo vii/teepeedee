@@ -1,5 +1,6 @@
 #include <sstream>
 
+#include <cstdlib>
 #include <cstring>
 #include <cctype>
 #include <err.h>

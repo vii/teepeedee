@@ -3,6 +3,7 @@
 
 #include <exception>
 #include <string>
+#include <cstring>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -146,6 +147,7 @@ public:
   void
   getsockname(struct sockaddr_in&sai)const
   {
+    using std::memset;
     socklen_t len = sizeof sai;
     memset(&sai,0,sizeof sai);
     getsockname(&sai,&len);
@@ -153,6 +155,7 @@ public:
   void
   getpeername(struct sockaddr_in&sai)const
   {
+    using std::memset;
     socklen_t len = sizeof sai;
     memset(&sai,0,sizeof sai);
     getpeername(&sai,&len);
